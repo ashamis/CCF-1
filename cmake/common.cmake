@@ -22,7 +22,7 @@ else()
   unset(NODES)
 endif()
 
-option(VERBOSE_LOGGING "Enable verbose logging" OFF)
+option(VERBOSE_LOGGING "Enable verbose logging" ON)
 set(TEST_HOST_LOGGING_LEVEL "info")
 if(VERBOSE_LOGGING)
   add_compile_definitions(VERBOSE_LOGGING)
