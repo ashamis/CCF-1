@@ -488,6 +488,10 @@ class Consortium:
             ), f"Service status {current_status} (expected {status.name})"
 
     def _check_node_exists(self, remote_node, node_id, node_status=None):
+        with remote_node.client() as c:
+            r = c.get("/node/state")
+            LOG.warning(f"XXXX: {r.body.json()}")
+
         with remote_node.client(f"member{self.get_any_active_member().member_id}") as c:
             r = c.post("/gov/read", {"table": "public:ccf.gov.nodes", "key": node_id})
 
