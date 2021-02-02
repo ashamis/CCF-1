@@ -110,7 +110,7 @@ namespace ccf
             get_my_hashed_nonce(tx_id).h.begin()),
         "hashed_nonce does not match my nonce");
 
-      BftNodeSignature bft_node_sig(std::move(sig_vec), node_id, hashed_nonce);
+      BftNodeSignature bft_node_sig(std::move(sig_vec), node_id, hashed_nonce, root);
       try_match_unmatched_nonces(
         cert, bft_node_sig, tx_id.term, tx_id.version, node_id);
       cert.sigs.insert(std::pair<kv::NodeId, BftNodeSignature>(
@@ -172,7 +172,7 @@ namespace ccf
       {
         CommitCert cert(root, my_nonce);
         cert.have_primary_signature = true;
-        BftNodeSignature bft_node_sig(sig, node_id, hashed_nonce);
+        BftNodeSignature bft_node_sig(sig, node_id, hashed_nonce, root);
         bft_node_sig.is_primary = true;
         try_match_unmatched_nonces(
           cert, bft_node_sig, tx_id.term, tx_id.version, node_id);
@@ -192,7 +192,7 @@ namespace ccf
         // verify the signatures
         auto& cert = it->second;
         cert.root = root;
-        BftNodeSignature bft_node_sig({}, node_id, hashed_nonce);
+        BftNodeSignature bft_node_sig({}, node_id, hashed_nonce, root);
         bft_node_sig.is_primary = true;
         try_match_unmatched_nonces(
           cert, bft_node_sig, tx_id.term, tx_id.version, node_id);
@@ -202,11 +202,16 @@ namespace ccf
         {
           if (
             !sig.second.is_primary &&
+            cert.root != sig.second.root
+            /*
             !store->verify_signature(
               sig.second.node,
               cert.root,
               sig.second.sig.size(),
-              sig.second.sig.data()))
+              sig.second.sig.data())
+              */
+              )
+
           {
             // NOTE: We need to handle this case but for now having this make a
             // test fail will be very handy
