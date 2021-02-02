@@ -1469,7 +1469,8 @@ namespace aft
         state->last_idx,
         {},
         static_cast<uint32_t>(sig.sig.size()),
-        {}};
+        {},
+        sig.root};
 
       progress_tracker->get_my_hashed_nonce(
         {state->current_view, state->last_idx}, r.hashed_nonce);
@@ -1481,6 +1482,7 @@ namespace aft
         r.from_node,
         r.signature_size,
         r.sig,
+        sig.root,
         r.hashed_nonce,
         node_count(),
         is_primary());
@@ -1512,11 +1514,20 @@ namespace aft
 
       auto progress_tracker = store->get_progress_tracker();
       CCF_ASSERT(progress_tracker != nullptr, "progress_tracker is not set");
+
+      bool res = progress_tracker->verify_signature(r.from_node, r.signature_size, r.sig, r.root);
+      if (!res)
+      {
+        LOG_INFO_FMT("AAAAAA did not verify");
+        return;
+      }
+
       auto result = progress_tracker->add_signature(
         {r.term, r.last_log_idx},
         r.from_node,
         r.signature_size,
         r.sig,
+        r.root,
         r.hashed_nonce,
         node_count(),
         is_primary());

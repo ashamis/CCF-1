@@ -27,11 +27,21 @@ namespace ccf
 
     std::shared_ptr<ProgressTrackerStore> store;
 
+    bool verify_signature(
+      kv::NodeId node_id,
+      uint32_t signature_size,
+      std::array<uint8_t, MBEDTLS_ECDSA_MAX_LEN>& sig,
+      crypto::Sha256Hash& root)
+    {
+      return store->verify_signature(node_id, root, signature_size, sig.data());
+    }
+
     kv::TxHistory::Result add_signature(
       kv::TxID tx_id,
       kv::NodeId node_id,
       uint32_t signature_size,
       std::array<uint8_t, MBEDTLS_ECDSA_MAX_LEN>& sig,
+      crypto::Sha256Hash& root,
       Nonce hashed_nonce,
       uint32_t node_count,
       bool is_primary)
@@ -54,10 +64,8 @@ namespace ccf
       }
       else
       {
-        if (
-          node_id != id && it->second.have_primary_signature &&
-          !store->verify_signature(
-            node_id, it->second.root, signature_size, sig.data()))
+        // TODO: compare roots
+        if (node_id != id && it->second.have_primary_signature && !std::equal(it->second.root.h.begin(), it->second.root.h.end(), root.h.begin()))
         {
           // NOTE: We need to handle this case but for now having this make a
           // test fail will be very handy
@@ -306,6 +314,7 @@ namespace ccf
             backup_sig.node,
             backup_sig.sig.size(),
             sig,
+            sigs_value.root,
             backup_sig.hashed_nonce,
             node_count,
             is_primary);
@@ -621,6 +630,7 @@ namespace ccf
 
       for (auto& sig : view_change.signatures)
       {
+        // TODO: check the roots match
         if (!store->verify_signature(
               sig.node, it->second.root, sig.sig.size(), sig.sig.data()))
         {
