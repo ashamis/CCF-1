@@ -521,6 +521,27 @@ namespace aft
       recv_message(OArray({data, data + size}));
     }
 
+    class AsyncPendingExec
+    {
+    public:
+      AsyncPendingExec(
+        Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_,
+        std::unique_ptr<AbstractMsgCallback>&& pending_execution_) :
+        self(self_), pending_execution(std::move(pending_execution_))
+      {}
+
+      Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
+      std::unique_ptr<AbstractMsgCallback> pending_execution;
+    };
+
+    static void fn_foobar(
+      std::unique_ptr<threading::Tmsg<AsyncPendingExec>> msg)
+    {
+      msg->data.self->add_to_pending_execution(
+        std::move(msg->data.pending_execution));
+    };
+
+
     void recv_message(OArray&& d)
     {
       std::unique_ptr<AbstractMsgCallback> aee;
@@ -558,7 +579,7 @@ namespace aft
                   data, size);
             aee = std::make_unique<SignedAppendEntryResponseCallback>(
               *this, std::move(r));
-            //always_execute_async = true;
+            always_execute_async = true;
             break;
           }
 
@@ -624,7 +645,24 @@ namespace aft
           }
         }
 
-        if (!is_execution_pending || always_execute_async)
+        if (always_execute_async)
+        {
+          auto msg_aaaa = std::make_unique<threading::Tmsg<AsyncPendingExec>>(
+            [](std::unique_ptr<threading::Tmsg<AsyncPendingExec>> msg_bbbb) {
+              msg_bbbb->data.pending_execution->async_execute();
+
+              msg_bbbb->reset_cb(fn_foobar);
+              threading::ThreadMessaging::thread_messaging.add_task(
+                threading::MAIN_THREAD_ID, std::move(msg_bbbb));
+            },
+            this,
+            std::move(aee));
+
+          // TODO: fix the thread_id
+          threading::ThreadMessaging::thread_messaging.add_task(
+            2, std::move(msg_aaaa));
+        }
+        else if (!is_execution_pending)
         {
           aee->execute();
         }
@@ -640,6 +678,19 @@ namespace aft
 
       try_execute_pending();
     }
+    
+    void add_to_pending_execution(std::unique_ptr<AbstractMsgCallback> aee)
+    {
+      if (!is_execution_pending)
+      {
+        aee->execute();
+        try_execute_pending();
+      }
+      else
+      {
+        pending_executions.push_back(std::move(aee));
+      }
+    }
 
     void try_execute_pending()
     {
@@ -652,6 +703,7 @@ namespace aft
           pending_executions.pop_front();
           pe->execute();
         }
+
       }
       else
       {
@@ -1504,39 +1556,48 @@ namespace aft
       try_send_sig_ack({r.term, r.last_log_idx}, result);
     }
 
-    void recv_append_entries_signed_response(SignedAppendEntriesResponse r)
+    bool recv_append_entries_signed_response(
+      SignedAppendEntriesResponse r, bool is_pre_exec)
     {
-      auto node = nodes.find(r.from_node);
-      if (node == nodes.end())
-      {
-        // Ignore if we don't recognise the node.
-        LOG_FAIL_FMT(
-          "Recv signed append entries response to {} from {}: unknown node",
-          state->my_node_id,
-          r.from_node);
-        return;
-      }
-
       auto progress_tracker = store->get_progress_tracker();
       CCF_ASSERT(progress_tracker != nullptr, "progress_tracker is not set");
 
-      bool res = progress_tracker->verify_signature(r.from_node, r.signature_size, r.sig, r.root);
-      if (!res)
+      if (is_pre_exec)
       {
-        LOG_INFO_FMT("AAAAAA did not verify, from:{}", r.from_node);
-        return;
+        auto node = nodes.find(r.from_node);
+        if (node == nodes.end())
+        {
+          // Ignore if we don't recognise the node.
+          LOG_FAIL_FMT(
+            "Recv signed append entries response to {} from {}: unknown node",
+            state->my_node_id,
+            r.from_node);
+          return false;
+        }
+
+        bool res = progress_tracker->verify_signature(
+          r.from_node, r.signature_size, r.sig, r.root);
+        if (!res)
+        {
+          LOG_INFO_FMT("AAAAAA did not verify, from:{}", r.from_node);
+          return false;
+        }
+      }
+      else
+      {
+        auto result = progress_tracker->add_signature(
+          {r.term, r.last_log_idx},
+          r.from_node,
+          r.signature_size,
+          r.sig,
+          r.root,
+          r.hashed_nonce,
+          node_count(),
+          is_primary());
+        try_send_sig_ack({r.term, r.last_log_idx}, result);
       }
 
-      auto result = progress_tracker->add_signature(
-        {r.term, r.last_log_idx},
-        r.from_node,
-        r.signature_size,
-        r.sig,
-        r.root,
-        r.hashed_nonce,
-        node_count(),
-        is_primary());
-      try_send_sig_ack({r.term, r.last_log_idx}, result);
+      return true;
     }
 
     void try_send_sig_ack(kv::TxID tx_id, kv::TxHistory::Result r)
