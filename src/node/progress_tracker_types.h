@@ -15,7 +15,7 @@ namespace ccf
   {
     bool is_primary;
     Nonce nonce;
-    //crypto::Sha256Hash root;
+    crypto::Sha256Hash root;
 
     BftNodeSignature(const NodeSignature& ns) :
       NodeSignature(ns),
@@ -25,9 +25,9 @@ namespace ccf
     BftNodeSignature(
       const std::vector<uint8_t>& sig_,
       NodeId node_,
-      Nonce hashed_nonce_/*,
-      crypto::Sha256Hash& root_*/) :
-      NodeSignature(sig_, node_, hashed_nonce_), is_primary(false)//, root(root_)
+      Nonce hashed_nonce_,
+      crypto::Sha256Hash& root_) :
+      NodeSignature(sig_, node_, hashed_nonce_), is_primary(false), root(root_)
     {}
   };
 

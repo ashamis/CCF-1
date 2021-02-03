@@ -82,7 +82,7 @@ namespace ccf
 
   static void log_hash(const crypto::Sha256Hash& h, HashOp flag)
   {
-    LOG_INFO_FMT("History [{}] {}", flag, h);
+    LOG_DEBUG_FMT("History [{}] {}", flag, h);
   }
 
   class NullTxHistoryPendingTx : public kv::PendingTx
@@ -672,10 +672,6 @@ namespace ccf
 
     void rollback(kv::Version v, kv::Term t) override
     {
-      if (v > 1)
-      {
-        //throw std::logic_error("foobar");
-      }
       set_term(t);
       replicated_state_tree.retract(v);
       log_hash(replicated_state_tree.get_root(), ROLLBACK);

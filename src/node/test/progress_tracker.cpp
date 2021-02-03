@@ -96,7 +96,7 @@ void ordered_execution(
         i,
         MBEDTLS_ECDSA_MAX_LEN,
         sig,
-        //root,
+        root,
         hashed_nonce,
         node_count,
         am_i_primary);
@@ -363,7 +363,7 @@ TEST_CASE("View Changes")
         i,
         MBEDTLS_ECDSA_MAX_LEN,
         sig,
-        //root,
+        root,
         hashed_nonce,
         node_count,
         false);
@@ -401,7 +401,7 @@ TEST_CASE("View Changes")
         i,
         MBEDTLS_ECDSA_MAX_LEN,
         sig,
-        //root,
+        root,
         hashed_nonce,
         node_count,
         false);
@@ -441,7 +441,7 @@ TEST_CASE("View Changes")
         i,
         MBEDTLS_ECDSA_MAX_LEN,
         sig,
-        //root,
+        root,
         hashed_nonce,
         node_count,
         false);

@@ -142,7 +142,6 @@ namespace ccf
       std::shared_ptr<enclave::RpcContext> ctx,
       kv::Tx& tx,
       const PreExec& pre_exec = {},
-      bool normal_tx = true,
       kv::Version reserved = -1)
     {
       const auto endpoint = endpoints.find_endpoint(tx, *ctx);
@@ -282,46 +281,27 @@ namespace ccf
 
           kv::CommitSuccess commit_success;
 
-          if (normal_tx)
+          LOG_DEBUG_FMT(
+            "2.1 AAAAAAA term:{}, version:{}, reserved:{}",
+            tx.get_term(),
+            tx.get_version(),
+            reserved);
+          if (reserved != -1)
           {
-            LOG_INFO_FMT("2.1 AAAAAAA term:{}, version:{}, reserved:{}", tx.get_term(), tx.get_version(), reserved);
-            if (reserved != -1)
-            {
-              auto f = [&]() { return tables.next_version(); return reserved; };
-              commit_success = tx.commit(f);
-            }
-            else
-            {
-              commit_success = tx.commit();
-            }
-            LOG_INFO_FMT("2. AAAAAAA commit_success:{}, version:{}", commit_success, tx.get_version());
+            auto f = [&]() {
+              return tables.next_version();
+              return reserved;
+            };
+            commit_success = tx.commit(f);
           }
           else
           {
-            class PendingTxRet : public kv::PendingTx
-            {
-            public:
-              PendingTxRet(kv::PendingTxInfo&& info_) : info(std::move(info_)) {}
-
-              kv::PendingTxInfo call() override
-              {
-                return std::move(info);
-              }
-
-              kv::PendingTxInfo info;
-            };
-
-            LOG_INFO_FMT("2.1 AAAAAAA term:{}, version:{}", tx.get_term(), tx.get_version());
-            kv::PendingTxInfo info = ((kv::ReservedTx*)&tx)->commit_reserved();
-            kv::TxID txid = {tx.get_term(), tx.get_version()};
-            auto info_ = std::make_unique<PendingTxRet>(std::move(info));
-            commit_success = tables.commit(txid, std::move(info_), false);
-            LOG_INFO_FMT("2. AAAAAAA commit_success:{}, version:{}", commit_success, tx.get_version());
-            // commit_success = info.success;
-            // commit_success = tx.commit();
-            // commit_success = kv::CommitSuccess::OK;
-            return ctx->serialise_response();
+            commit_success = tx.commit();
           }
+          LOG_DEBUG_FMT(
+            "2. AAAAAAA commit_success:{}, version:{}",
+            commit_success,
+            tx.get_version());
 
           switch (commit_success)
           {
@@ -588,22 +568,8 @@ namespace ccf
       std::shared_ptr<enclave::RpcContext> ctx,
       kv::Consensus::SeqNo last_idx) override
     {
-      if (true)
-      //if (last_idx == kv::NoVersion)
-      {
-        LOG_INFO_FMT("1.1 AAAAAAA, last_idx:{}", last_idx);
-        auto tx = tables.create_tx();
-        return process_bft(ctx, tx, true);
-      }
-      else
-      {
-        LOG_INFO_FMT("1. AAAAAAA, last_idx:{}", last_idx);
-        tables.next_txid();
-        // TODO: pass last term here
-        auto tx = tables.create_reserved_tx(last_idx, 2);
-        //auto tx = tables.create_tx();
-        return process_bft(ctx, tx, false);
-      }
+      auto tx = tables.create_tx();
+      return process_bft(ctx, tx, last_idx);
     }
 
     /** Process a serialised command with the associated RPC context via BFT
@@ -611,7 +577,7 @@ namespace ccf
      * @param ctx Context for this RPC
      */
     ProcessBftResp process_bft(
-      std::shared_ptr<enclave::RpcContext> ctx, kv::Tx& tx, bool normal_tx = true, kv::Consensus::SeqNo last_idx = -1) override
+      std::shared_ptr<enclave::RpcContext> ctx, kv::Tx& tx, kv::Consensus::SeqNo last_idx = -1) override
     {
       // Note: this can only happen if the primary is malicious,
       // and has executed a user transaction when the service wasn't
@@ -635,7 +601,7 @@ namespace ccf
            ctx.frame_format()});
       };
 
-      auto rep = process_command(ctx, tx, fn, normal_tx, last_idx);
+      auto rep = process_command(ctx, tx, fn, last_idx);
 
       version = tx.get_version();
       return {std::move(rep.value()), version};

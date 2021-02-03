@@ -543,13 +543,12 @@ namespace kv
   class ReservedTx : public Tx
   {
   public:
-    ReservedTx(AbstractStore* _store, Version reserved, Term term_ = 0) : Tx(_store)
+    ReservedTx(AbstractStore* _store, Version reserved) : Tx(_store)
     {
       committed = false;
       success = false;
       read_version = reserved - 1;
       version = reserved;
-      term = term_;
     }
 
     // Used by frontend to commit reserved transactions
