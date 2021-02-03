@@ -102,8 +102,8 @@ namespace kv
       set_current_domain(SecurityDomain::PUBLIC);
       serialise_internal(is_snapshot);
       serialise_internal(tx_id.version);
-      //serialise_internal(max_conflict_version);
-      serialise_internal(0);
+      serialise_internal(max_conflict_version);
+      //serialise_internal(0);
       LOG_DEBUG_FMT(
         "XXXXXXXX is_snapshot:{}, version:{}, max_conflict_version:{}",
         is_snapshot,
