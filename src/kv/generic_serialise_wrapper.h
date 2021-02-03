@@ -5,6 +5,7 @@
 #include "ds/buffer.h"
 #include "kv_types.h"
 #include "serialised_entry.h"
+#include "ds/logger.h"
 
 #include <optional>
 
@@ -101,7 +102,13 @@ namespace kv
       set_current_domain(SecurityDomain::PUBLIC);
       serialise_internal(is_snapshot);
       serialise_internal(tx_id.version);
-      serialise_internal(max_conflict_version);
+      //serialise_internal(max_conflict_version);
+      serialise_internal(0);
+      LOG_INFO_FMT(
+        "XXXXXXXX is_snapshot:{}, version:{}, max_conflict_version:{}",
+        is_snapshot,
+        tx_id.version,
+        max_conflict_version);
     }
 
     void start_map(const std::string& name, SecurityDomain domain)
@@ -203,6 +210,17 @@ namespace kv
       std::vector<uint8_t> serialised_hdr;
       std::vector<uint8_t> encrypted_private_domain(
         serialised_private_domain.size());
+
+      LOG_INFO_FMT(
+        "NNNNNNNNNNNNNN hdr Encrypting term:{}, version:{}, is_snapshot:{}, "
+        "plain:{}, data:{}---{}",
+        tx_id.term,
+        tx_id.version,
+        is_snapshot,
+        serialised_private_domain,
+        serialised_public_domain,
+        std::string(
+          serialised_public_domain.begin(), serialised_public_domain.end()));
 
       crypto_util->encrypt(
         serialised_private_domain,

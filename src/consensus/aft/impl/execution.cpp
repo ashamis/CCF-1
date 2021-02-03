@@ -52,6 +52,7 @@ namespace aft
   kv::Version ExecutorImpl::execute_request(
     std::unique_ptr<RequestMessage> request,
     bool is_create_request,
+    kv::Consensus::SeqNo last_idx,
     std::shared_ptr<aft::RequestTracker> request_tracker)
   {
     std::shared_ptr<enclave::RpcContext>& ctx = request->get_request_ctx().ctx;
@@ -84,7 +85,7 @@ namespace aft
     ctx->execute_on_node = true;
     ctx->set_apply_writes(true);
 
-    enclave::RpcHandler::ProcessBftResp rep = frontend->process_bft(ctx);
+    enclave::RpcHandler::ProcessBftResp rep = frontend->process_bft(ctx, last_idx);
 
     request->callback(std::move(rep.result));
 
@@ -122,6 +123,7 @@ namespace aft
   kv::Version ExecutorImpl::commit_replayed_request(
     kv::Tx& tx,
     std::shared_ptr<aft::RequestTracker> request_tracker,
+    kv::Consensus::SeqNo last_idx,
     kv::Consensus::SeqNo committed_seqno)
   {
     auto aft_requests = tx.rw<aft::RequestsMap>(ccf::Tables::AFT_REQUESTS);
@@ -140,6 +142,6 @@ namespace aft
       std::move(request.raw), request.rid, std::move(ctx), nullptr);
 
     return execute_request(
-      std::move(request_message), state->commit_idx == 0, request_tracker);
+      std::move(request_message), state->commit_idx == 0, last_idx, request_tracker);
   }
 }

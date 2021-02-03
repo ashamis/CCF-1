@@ -650,6 +650,7 @@ namespace kv
 
       // Throw away any local commits that have not propagated via the
       // consensus.
+      LOG_INFO_FMT("DDDDD value of v:{}", v);
       rollback(v - 1);
 
       if (strict_versions && !ignore_strict_versions)
@@ -804,7 +805,7 @@ namespace kv
             get_history(),
             std::move(data),
             public_only,
-            std::make_unique<Tx>(this),
+            std::make_unique<Tx>(this, v),
             v,
             std::move(changes),
             std::move(new_maps));
@@ -902,6 +903,7 @@ namespace kv
 
       {
         std::lock_guard<SpinLock> vguard(version_lock);
+        /*
         if (txid.term != term)
         {
           // This can happen when a transaction started before a view change,
@@ -911,6 +913,7 @@ namespace kv
 
           return CommitSuccess::NO_REPLICATE;
         }
+        */
 
         if (globally_committable && txid.version > last_committable)
           last_committable = txid.version;
@@ -945,6 +948,7 @@ namespace kv
           if (h)
           {
             h->append(*data_shared);
+            LOG_INFO_FMT("33333 - {}", *data_shared);
           }
 
           LOG_DEBUG_FMT(
@@ -1173,9 +1177,9 @@ namespace kv
       return Tx(this);
     }
 
-    ReservedTx create_reserved_tx(Version v)
+    ReservedTx create_reserved_tx(Version v, Term term = 0)
     {
-      return ReservedTx(this, v);
+      return ReservedTx(this, v, term);
     }
   };
 }

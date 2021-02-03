@@ -527,8 +527,9 @@ namespace aft
       const uint8_t* data = d.data();
       size_t size = d.size();
       RaftMsgType type = serialized::peek<RaftMsgType>(data, size);
+      bool always_execute_async = false;
 
-      try
+      //try
       {
         switch (type)
         {
@@ -557,6 +558,7 @@ namespace aft
                   data, size);
             aee = std::make_unique<SignedAppendEntryResponseCallback>(
               *this, std::move(r));
+            always_execute_async = true;
             break;
           }
 
@@ -622,7 +624,7 @@ namespace aft
           }
         }
 
-        if (!is_execution_pending)
+        if (!is_execution_pending || always_execute_async)
         {
           aee->execute();
         }
@@ -631,9 +633,9 @@ namespace aft
           pending_executions.push_back(std::move(aee));
         }
       }
-      catch (const std::logic_error& err)
+      //catch (const std::logic_error& err)
       {
-        LOG_FAIL_EXC(err.what());
+        //LOG_FAIL_EXC(err.what());
       }
 
       try_execute_pending();
@@ -828,7 +830,7 @@ namespace aft
     bool on_request(const kv::TxHistory::RequestCallbackArgs& args)
     {
       auto request = executor->create_request_message(args, get_commit_idx());
-      executor->execute_request(std::move(request), is_first_request);
+      executor->execute_request(std::move(request), is_first_request, kv::NoVersion);
       is_first_request = false;
 
       return true;
@@ -1383,7 +1385,10 @@ namespace aft
             if (consensus_type == ConsensusType::BFT)
             {
               state->last_idx = executor->commit_replayed_request(
-                ds->get_tx(), request_tracker, state->commit_idx);
+                ds->get_tx(),
+                request_tracker,
+                state->last_idx,
+                state->commit_idx);
             }
             break;
           }
@@ -1482,7 +1487,7 @@ namespace aft
         r.from_node,
         r.signature_size,
         r.sig,
-        sig.root,
+        //sig.root,
         r.hashed_nonce,
         node_count(),
         is_primary());
@@ -1518,7 +1523,8 @@ namespace aft
       bool res = progress_tracker->verify_signature(r.from_node, r.signature_size, r.sig, r.root);
       if (!res)
       {
-        LOG_INFO_FMT("AAAAAA did not verify");
+        LOG_INFO_FMT("AAAAAA did not verify, from:{}", r.from_node);
+        //throw std::logic_error("foobar 123");
         return;
       }
 
@@ -1527,7 +1533,7 @@ namespace aft
         r.from_node,
         r.signature_size,
         r.sig,
-        r.root,
+        //r.root,
         r.hashed_nonce,
         node_count(),
         is_primary());

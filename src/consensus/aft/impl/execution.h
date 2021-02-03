@@ -37,6 +37,7 @@ namespace aft
     virtual kv::Version execute_request(
       std::unique_ptr<RequestMessage> request,
       bool is_create_request,
+      kv::Consensus::SeqNo last_idx,
       std::shared_ptr<aft::RequestTracker> request_tracker = nullptr) = 0;
 
     virtual std::unique_ptr<aft::RequestMessage> create_request_message(
@@ -46,6 +47,7 @@ namespace aft
     virtual kv::Version commit_replayed_request(
       kv::Tx& tx,
       std::shared_ptr<aft::RequestTracker> request_tracker,
+      kv::Consensus::SeqNo last_idx,
       kv::Consensus::SeqNo committed_seqno) = 0;
   };
 
@@ -69,6 +71,7 @@ namespace aft
     kv::Version execute_request(
       std::unique_ptr<RequestMessage> request,
       bool is_create_request,
+      kv::Consensus::SeqNo last_idx,
       std::shared_ptr<aft::RequestTracker> request_tracker = nullptr) override;
 
     std::unique_ptr<aft::RequestMessage> create_request_message(
@@ -78,6 +81,7 @@ namespace aft
     kv::Version commit_replayed_request(
       kv::Tx& tx,
       std::shared_ptr<aft::RequestTracker> request_tracker,
+      kv::Consensus::SeqNo last_idx,
       kv::Consensus::SeqNo committed_seqno) override;
 
   private:

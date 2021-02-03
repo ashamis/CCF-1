@@ -66,7 +66,6 @@ namespace kv
       cipher.resize(plain.size());
 
       set_iv(hdr, tx_id, is_snapshot);
-
       ledger_secrets->get_encryption_key_for(tx_id.version)
         ->encrypt(hdr.get_iv(), plain, additional_data, cipher.data(), hdr.tag);
 

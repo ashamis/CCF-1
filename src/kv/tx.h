@@ -226,7 +226,7 @@ namespace kv
      *
      * @return transaction outcome
      */
-    CommitSuccess commit()
+    CommitSuccess commit( std::function<Version()> f = nullptr)
     {
       if (committed)
         throw std::logic_error("Transaction already committed");
@@ -249,7 +249,7 @@ namespace kv
 
       auto c = apply_changes(
         all_changes,
-        [store]() { return store->next_version(); },
+        f == nullptr ? [store]() { return store->next_version(); } : f,
         hooks,
         created_maps);
 
@@ -543,12 +543,13 @@ namespace kv
   class ReservedTx : public Tx
   {
   public:
-    ReservedTx(AbstractStore* _store, Version reserved) : Tx(_store)
+    ReservedTx(AbstractStore* _store, Version reserved, Term term_ = 0) : Tx(_store)
     {
       committed = false;
       success = false;
       read_version = reserved - 1;
       version = reserved;
+      term = term_;
     }
 
     // Used by frontend to commit reserved transactions
