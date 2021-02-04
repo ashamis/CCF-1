@@ -147,6 +147,11 @@ namespace kv
       return success;
     };
 
+    bool support_asyc_execution() override
+    {
+      return false;
+    }
+
     ExecutionWrapperStore* store;
     std::shared_ptr<TxHistory> history;
     const std::vector<uint8_t> data;
@@ -210,6 +215,11 @@ namespace kv
     Tx& get_tx() override
     {
       return *tx;
+    }
+
+    virtual bool support_asyc_execution() override
+    {
+      return false;
     }
 
     ExecutionWrapperStore* store;
@@ -605,5 +615,10 @@ namespace kv
       tx->set_change_list(std::move(changes), term);
       return ApplySuccess::PASS;
     };
+
+    virtual bool support_asyc_execution() override
+    {
+      return true;
+    }
   };
 }

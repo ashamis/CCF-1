@@ -536,6 +536,7 @@ namespace kv
     virtual kv::Version get_index() = 0;
     virtual ccf::PrimarySignature& get_signature() = 0;
     virtual kv::Tx& get_tx() = 0;
+    virtual bool support_asyc_execution() = 0;
   };
 
   class AbstractStore

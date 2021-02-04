@@ -1039,7 +1039,7 @@ namespace aft
     {
       AsyncExecution(
         Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_,
-        std::vector<std::tuple<
+        std::list<std::tuple<
           std::unique_ptr<kv::AbstractExecutionWrapper>,
           kv::Version>>&& append_entries_,
         AppendEntries&& r_,
@@ -1051,7 +1051,7 @@ namespace aft
       {}
 
       Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
-      std::vector<
+      std::list<
         std::tuple<std::unique_ptr<kv::AbstractExecutionWrapper>, kv::Version>>
         append_entries;
       AppendEntries r;
@@ -1221,7 +1221,7 @@ namespace aft
         r.idx,
         r.prev_idx);
 
-      std::vector<
+      std::list<
         std::tuple<std::unique_ptr<kv::AbstractExecutionWrapper>, kv::Version>>
         append_entries;
       // Finally, deserialise each entry in the batch
@@ -1286,43 +1286,100 @@ namespace aft
         msg->cb(std::move(msg));
       }
     }
+    
+
+    struct AsyncExecutionRet
+    {
+      AsyncExecutionRet(
+        Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_) :
+        self(self_)
+      {}
+
+      Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
+    };
 
     static void execute_append_entries_cb(
       std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
     {
-      msg->data.self->execute_append_entries(
-        msg->data.append_entries, msg->data.r, msg->data.confirm_evidence);
-      msg->cb =
-        reinterpret_cast<void (*)(std::unique_ptr<threading::ThreadMsg>)>(
-          continue_execution);
+      auto self = msg->data.self;
+      bool result = msg->data.self->execute_append_entries(std::move(msg));
+      if (!result)
+      {
+        LOG_INFO_FMT("returned early from execution");
+        return;
+      }
+
+      auto msg_ret = std::make_unique<threading::Tmsg<AsyncExecutionRet>>(
+        continue_execution, self);
       if (threading::ThreadMessaging::thread_count > 1)
       {
         threading::ThreadMessaging::thread_messaging.add_task(
-          threading::MAIN_THREAD_ID, std::move(msg));
+          threading::MAIN_THREAD_ID, std::move(msg_ret));
       }
       else
       {
-        msg->cb(std::move(msg));
+        msg_ret->cb(std::move(msg_ret));
       }
     }
 
     static void continue_execution(
-      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
+      std::unique_ptr<threading::Tmsg<AsyncExecutionRet>> msg)
     {
       msg->data.self->is_execution_pending = false;
       msg->data.self->try_execute_pending();
     }
 
-    void execute_append_entries(
-      std::vector<
-        std::tuple<std::unique_ptr<kv::AbstractExecutionWrapper>, kv::Version>>&
-        append_entries,
-      AppendEntries& r,
-      bool confirm_evidence)
+    struct AsyncExecutionCtx
     {
+      AsyncExecutionCtx(
+        std::unique_ptr<threading::Tmsg<AsyncExecution>>&& msg_) :
+        msg(std::move(msg_)), pending_cbs(0)
+      {}
+
+      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg;
+      uint32_t pending_cbs;
+    };
+
+    struct AsyncExecTxMsg
+    {
+      AsyncExecTxMsg(
+        Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_,
+        std::unique_ptr<kv::AbstractExecutionWrapper>&& ds_,
+        kv::Version last_idx_,
+        kv::Version commit_idx_,
+        std::shared_ptr<AsyncExecutionCtx> ctx_) :
+        self(self_),
+        ds(std::move(ds_)),
+        last_idx(last_idx_),
+        commit_idx(commit_idx_),
+        ctx(ctx_)
+      {}
+
+      Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
+      std::unique_ptr<kv::AbstractExecutionWrapper> ds;
+      kv::Version last_idx;
+      kv::Version commit_idx;
+      std::shared_ptr<AsyncExecutionCtx> ctx;
+    };
+
+    bool execute_append_entries(
+      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
+    {
+      std::list<
+        std::tuple<std::unique_ptr<kv::AbstractExecutionWrapper>, kv::Version>>&
+        append_entries = msg->data.append_entries;
+      AppendEntries& r = msg->data.r;
+      bool confirm_evidence = msg->data.confirm_evidence;
+
+      auto async_exec = std::make_shared<AsyncExecutionCtx>(std::move(msg));
+
       std::lock_guard<SpinLock> guard(state->lock);
-      for (auto& ae : append_entries)
+      while(!append_entries.empty())
       {
+        LOG_INFO_FMT("support async - {}", std::get<0>(append_entries.front())->support_asyc_execution());
+
+        auto ae = std::move(append_entries.front());
+        append_entries.pop_front();
         auto& [ds, i] = ae;
         state->last_idx = i;
 
@@ -1343,7 +1400,7 @@ namespace aft
           ledger->truncate(state->last_idx);
           send_append_entries_response(
             r.from_node, AppendEntriesResponseType::FAIL);
-          return;
+          return true;
         }
 
         for (auto& hook : ds->get_hooks())
@@ -1436,17 +1493,27 @@ namespace aft
           {
             if (consensus_type == ConsensusType::BFT)
             {
-              state->last_idx = executor->commit_replayed_request(
-                ds->get_tx(),
-                request_tracker,
+              auto msg = std::make_unique<threading::Tmsg<AsyncExecTxMsg>>(
+                [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
+                  auto self = msg->data.self;
+                  self->executor->commit_replayed_request(
+                    msg->data.ds->get_tx(),
+                    self->request_tracker,
+                    self->state->last_idx,
+                    self->state->commit_idx);
+                },
+                this,
+                std::move(ds),
                 state->last_idx,
-                state->commit_idx);
+                state->commit_idx,
+                async_exec);
+
+                msg->cb(std::move(msg));
             }
             break;
           }
 
-          case kv::ApplySuccess::PASS_SNAPSHOT_EVIDENCE:
-          {
+          case kv::ApplySuccess::PASS_SNAPSHOT_EVIDENCE: {
             break;
           }
 
@@ -1457,6 +1524,17 @@ namespace aft
         }
       }
 
+      if (async_exec->pending_cbs == 0)
+      {
+        return execute_append_entries_finish(confirm_evidence, r);
+      }
+      return false;
+    }
+
+    void async_execution_complete(std::shared_ptr<AsyncExecutionCtx>& /*ctx*/) {}
+
+    bool execute_append_entries_finish(bool confirm_evidence, AppendEntries& r)
+    {
       if (
         consensus_type == ConsensusType::BFT && confirm_evidence &&
         !view_change_tracker->check_evidence(r.term))
@@ -1471,7 +1549,7 @@ namespace aft
           r.term);
         send_append_entries_response(
           r.from_node, AppendEntriesResponseType::REQUIRE_EVIDENCE);
-        return;
+        return true;
       }
 
       // After entries have been deserialised, we try to commit the leader's
@@ -1486,6 +1564,7 @@ namespace aft
         state->view_history.update(lci + 1, r.term_of_idx);
 
       send_append_entries_response(r.from_node, AppendEntriesResponseType::OK);
+      return true;
     }
 
     void send_append_entries_response(

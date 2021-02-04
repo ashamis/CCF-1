@@ -261,6 +261,12 @@ namespace aft
         throw std::logic_error("Not Implemented");
       }
 
+      bool support_asyc_execution() override
+      {
+        return true;
+        throw std::logic_error("Not Implemented");
+      }
+
     private:
       const std::vector<uint8_t>& data;
       kv::ConsensusHookPtrs hooks;
