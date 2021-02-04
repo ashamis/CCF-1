@@ -1345,11 +1345,13 @@ namespace aft
       AsyncExecTxMsg(
         Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_,
         std::unique_ptr<kv::AbstractExecutionWrapper>&& ds_,
+        std::unique_ptr<threading::Tmsg<AsyncExecution>>&& msg_,
         kv::Version last_idx_,
         kv::Version commit_idx_,
         std::shared_ptr<AsyncExecutionCtx> ctx_) :
         self(self_),
         ds(std::move(ds_)),
+        msg(std::move(msg_)),
         last_idx(last_idx_),
         commit_idx(commit_idx_),
         ctx(ctx_)
@@ -1357,6 +1359,7 @@ namespace aft
 
       Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
       std::unique_ptr<kv::AbstractExecutionWrapper> ds;
+      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg;
       kv::Version last_idx;
       kv::Version commit_idx;
       std::shared_ptr<AsyncExecutionCtx> ctx;
@@ -1493,7 +1496,7 @@ namespace aft
           {
             if (consensus_type == ConsensusType::BFT)
             {
-              auto msg = std::make_unique<threading::Tmsg<AsyncExecTxMsg>>(
+              auto tmsg = std::make_unique<threading::Tmsg<AsyncExecTxMsg>>(
                 [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
                   auto self = msg->data.self;
                   self->executor->commit_replayed_request(
@@ -1501,14 +1504,18 @@ namespace aft
                     self->request_tracker,
                     self->state->last_idx,
                     self->state->commit_idx);
+
+                  self->execute_append_entries(std::move(msg->data.msg));
                 },
                 this,
                 std::move(ds),
+                std::move(msg),
                 state->last_idx,
                 state->commit_idx,
                 async_exec);
 
-                msg->cb(std::move(msg));
+                tmsg->cb(std::move(tmsg));
+                return false;
             }
             break;
           }
