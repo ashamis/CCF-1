@@ -673,6 +673,7 @@ namespace aft
       }
       catch (const std::logic_error& err)
       {
+        LOG_INFO_FMT("error for msg type:{}", type);
         LOG_FAIL_EXC(err.what());
       }
 
@@ -1302,12 +1303,21 @@ namespace aft
       std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
     {
       auto self = msg->data.self;
-      bool result = msg->data.self->execute_append_entries(std::move(msg));
+      LOG_INFO_FMT("start new execution");
+      self->execute_append_entries_cb_aaa(std::move(msg));
+    }
+
+    void execute_append_entries_cb_aaa(
+      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
+    {
+      auto self = msg->data.self;
+      bool result = msg->data.self->execute_append_entries(msg);
       if (!result)
       {
         LOG_INFO_FMT("returned early from execution");
         return;
       }
+      LOG_INFO_FMT("finished execution");
 
       auto msg_ret = std::make_unique<threading::Tmsg<AsyncExecutionRet>>(
         continue_execution, self);
@@ -1366,7 +1376,7 @@ namespace aft
     };
 
     bool execute_append_entries(
-      std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
+      std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
     {
       std::list<
         std::tuple<std::unique_ptr<kv::AbstractExecutionWrapper>, kv::Version>>&
@@ -1375,11 +1385,27 @@ namespace aft
       bool confirm_evidence = msg->data.confirm_evidence;
 
       auto async_exec = std::make_shared<AsyncExecutionCtx>(std::move(msg));
+      bool is_first = true;
+      bool must_break = false;
 
-      std::lock_guard<SpinLock> guard(state->lock);
+      std::unique_lock<SpinLock> guard(state->lock);
       while(!append_entries.empty())
       {
         LOG_INFO_FMT("support async - {}", std::get<0>(append_entries.front())->support_asyc_execution());
+        if (must_break)
+        {
+          LOG_INFO_FMT("return must break");
+          return false;
+        }
+
+        if (!std::get<0>(append_entries.front())->support_asyc_execution() && !is_first && (async_exec->pending_cbs > 0))
+        {
+          LOG_INFO_FMT("return break async");
+          return false;
+        }
+
+        is_first = false;
+        must_break = !std::get<0>(append_entries.front())->support_asyc_execution() && (async_exec->pending_cbs > 0);
 
         auto ae = std::move(append_entries.front());
         append_entries.pop_front();
@@ -1505,7 +1531,18 @@ namespace aft
                     self->state->last_idx,
                     self->state->commit_idx);
 
-                  self->execute_append_entries(std::move(msg->data.msg));
+                  --msg->data.ctx->pending_cbs;
+                  LOG_INFO_FMT(
+                    "TTTTT running execute async pending_cbs:{}",
+                    msg->data.ctx->pending_cbs);
+                  if (msg->data.ctx->pending_cbs == 0)
+                  {
+                    LOG_INFO_FMT(
+                      "TTTTT continue running pending_cbs:{}",
+                      msg->data.ctx->pending_cbs);
+                    self->execute_append_entries_cb_aaa(
+                      std::move(msg->data.ctx->msg));
+                  }
                 },
                 this,
                 std::move(ds),
@@ -1514,8 +1551,14 @@ namespace aft
                 state->commit_idx,
                 async_exec);
 
-                tmsg->cb(std::move(tmsg));
-                return false;
+              threading::ThreadMessaging::thread_messaging.add_task(
+                threading::get_current_thread_id(), std::move(tmsg));
+              ++async_exec->pending_cbs;
+              LOG_INFO_FMT("TTTTT running async pending_cbs:{}", async_exec->pending_cbs);
+              // TODO: release lock here
+
+              //tmsg->cb(std::move(tmsg));
+              //return false;
             }
             break;
           }
@@ -1533,8 +1576,11 @@ namespace aft
 
       if (async_exec->pending_cbs == 0)
       {
-        return execute_append_entries_finish(confirm_evidence, r);
+        bool ret = execute_append_entries_finish(confirm_evidence, r);
+        LOG_INFO_FMT("return end pending == 0, ret:{}", ret);
+        return true;
       }
+      LOG_INFO_FMT("return end true");
       return false;
     }
 
