@@ -22,6 +22,11 @@ namespace ccf
   struct PrimarySignature;
 }
 
+namespace aft
+{
+  struct Request;
+}
+
 namespace kv
 {
   // Version indexes modifications to the local kv store. Negative values
@@ -525,6 +530,8 @@ namespace kv
 
   class Tx;
 
+
+
   class AbstractExecutionWrapper
   {
   public:
@@ -536,7 +543,9 @@ namespace kv
     virtual kv::Version get_index() = 0;
     virtual ccf::PrimarySignature& get_signature() = 0;
     virtual kv::Tx& get_tx() = 0;
+    virtual aft::Request& get_request() = 0;
     virtual bool support_asyc_execution() = 0;
+    virtual uint64_t get_max_conflict_version() = 0;
   };
 
   class AbstractStore

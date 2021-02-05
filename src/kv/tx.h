@@ -249,7 +249,13 @@ namespace kv
 
       auto c = apply_changes(
         all_changes,
-        f == nullptr ? [store]() { return store->next_version(); } : f,
+        f == nullptr ?
+          [store]() {
+            kv::Version v = store->next_version();
+            LOG_INFO_FMT("setting v:{}", v);
+            return v;
+          } :
+          f,
         hooks,
         created_maps);
 

@@ -883,7 +883,7 @@ namespace aft
     bool on_request(const kv::TxHistory::RequestCallbackArgs& args)
     {
       auto request = executor->create_request_message(args, get_commit_idx());
-      executor->execute_request(std::move(request), is_first_request, kv::NoVersion);
+      executor->execute_request(std::move(request), is_first_request, -1);
       is_first_request = false;
 
       return true;
@@ -1392,6 +1392,9 @@ namespace aft
       auto async_exec = std::make_shared<AsyncExecutionCtx>(std::move(msg));
       bool is_first = true;
       bool must_break = false;
+      uint64_t before_state_idx = state->last_idx;
+
+      std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>> pending_requests;
 
       std::unique_lock<SpinLock> guard(state->lock);
       while(!append_entries.empty())
@@ -1399,14 +1402,48 @@ namespace aft
         LOG_INFO_FMT("support async - {}", std::get<0>(append_entries.front())->support_asyc_execution());
         if (must_break)
         {
+          for (auto& tmsg : pending_requests)
+          {
+            threading::ThreadMessaging::thread_messaging.add_task(
+              threading::ThreadMessaging::get_execution_thread(
+                ++next_exec_thread),
+              std::move(tmsg));
+          }
+
           LOG_INFO_FMT("return must break");
           return false;
         }
 
         if (!std::get<0>(append_entries.front())->support_asyc_execution() && !is_first && (async_exec->pending_cbs > 0))
         {
+          for (auto& tmsg : pending_requests)
+          {
+            threading::ThreadMessaging::thread_messaging.add_task(
+              threading::ThreadMessaging::get_execution_thread(
+                ++next_exec_thread),
+              std::move(tmsg));
+          }
+
           LOG_INFO_FMT("return break async");
           return false;
+        }
+
+        if (std::get<0>(append_entries.front())->support_asyc_execution() && std::get<0>(append_entries.front())->get_max_conflict_version() > before_state_idx)
+        {
+          if (!pending_requests.empty())
+          {
+            for (auto& tmsg : pending_requests)
+            {
+              threading::ThreadMessaging::thread_messaging.add_task(
+                threading::ThreadMessaging::get_execution_thread(
+                  ++next_exec_thread),
+                std::move(tmsg));
+            }
+
+            LOG_INFO_FMT("return break async");
+            return false;
+          }
+          before_state_idx = state->last_idx;
         }
 
         is_first = false;
@@ -1467,7 +1504,7 @@ namespace aft
 
           case kv::ApplySuccess::PASS_SIGNATURE:
           {
-            LOG_DEBUG_FMT("Deserialising signature at {}", i);
+            LOG_INFO_FMT("Deserialising signature at {}", i);
             auto prev_lci = last_committable_index();
             committable_indices.push_back(i);
 
@@ -1530,8 +1567,9 @@ namespace aft
               auto tmsg = std::make_unique<threading::Tmsg<AsyncExecTxMsg>>(
                 [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
                   auto self = msg->data.self;
+                  LOG_INFO_FMT("running execute async last_idx:{}", msg->data.last_idx);
                   self->executor->commit_replayed_request(
-                    msg->data.ds->get_tx(),
+                    msg->data.ds->get_request(),
                     self->request_tracker,
                     msg->data.last_idx,
                     msg->data.commit_idx);
@@ -1564,12 +1602,15 @@ namespace aft
                 threading::get_current_thread_id(),
                 async_exec);
 
-              threading::ThreadMessaging::thread_messaging.add_task(
+                pending_requests.push_back(std::move(tmsg));
+/*
+              threading::ThreadMessaging::thread_messaging.add_task( 
                 threading::ThreadMessaging::get_execution_thread(
                   ++next_exec_thread),
                 std::move(tmsg));
+*/
               ++async_exec->pending_cbs;
-              LOG_INFO_FMT("TTTTT running async pending_cbs:{}", async_exec->pending_cbs);
+              LOG_INFO_FMT("TTTTT running async pending_cbs:{}, last_idx:{}", async_exec->pending_cbs, state->last_idx);
               // TODO: release lock here
 
               //tmsg->cb(std::move(tmsg));
@@ -1587,6 +1628,13 @@ namespace aft
             throw std::logic_error("Unknown ApplySuccess value");
           }
         }
+      }
+
+      for (auto& tmsg : pending_requests)
+      {
+        threading::ThreadMessaging::thread_messaging.add_task(
+          threading::ThreadMessaging::get_execution_thread(++next_exec_thread),
+          std::move(tmsg));
       }
 
       if (async_exec->pending_cbs == 0)

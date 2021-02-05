@@ -624,6 +624,7 @@ namespace kv
       const std::vector<uint8_t>& data,
       bool public_only,
       kv::Version& v,
+      kv::Version& max_conflict_version,
       OrderedChanges& changes,
       MapCollection& new_maps,
       bool ignore_strict_versions = false) override
@@ -646,7 +647,8 @@ namespace kv
         LOG_FAIL_FMT("Initialisation of deserialise object failed");
         return ApplySuccess::FAILED;
       }
-      std::tie(v, std::ignore) = v_.value();
+      std::tie(v, max_conflict_version) = v_.value();
+      LOG_INFO_FMT("LLLLLLLLLL version:{}, max_conflict:{}", v, max_conflict_version);
 
       // Throw away any local commits that have not propagated via the
       // consensus.
@@ -729,9 +731,10 @@ namespace kv
       else
       {
         kv::Version v;
+        kv::Version max_conflict_version;
         OrderedChanges changes;
         MapCollection new_maps;
-        if (!fill_maps(data, public_only, v, changes, new_maps, true))
+        if (!fill_maps(data, public_only, v, max_conflict_version, changes, new_maps, true))
         {
           return nullptr;
         }
@@ -807,6 +810,7 @@ namespace kv
             public_only,
             std::make_unique<Tx>(this, v),
             v,
+            max_conflict_version,
             std::move(changes),
             std::move(new_maps));
         }
@@ -890,7 +894,7 @@ namespace kv
         return CommitSuccess::OK;
       }
 
-      LOG_DEBUG_FMT(
+      LOG_INFO_FMT(
         "Store::commit {}{}",
         txid.version,
         (globally_committable ? " globally_committable" : ""));
@@ -907,7 +911,7 @@ namespace kv
         {
           // This can happen when a transaction started before a view change,
           // but tries to commit after the view change is complete.
-          LOG_DEBUG_FMT(
+          LOG_INFO_FMT(
             "Want to commit for term {} but term is {}", txid.term, term);
 
           return CommitSuccess::NO_REPLICATE;
@@ -927,7 +931,11 @@ namespace kv
         {
           auto search = pending_txs.find(last_replicated + offset);
           if (search == pending_txs.end())
+          {
+            LOG_INFO_FMT(
+              "could not find entry, {}", last_replicated + offset);
             break;
+          }
 
           auto& [pending_tx_, committable_] = search->second;
           auto [success_, reqid, data_, hooks_] = pending_tx_->call();
@@ -948,7 +956,7 @@ namespace kv
             h->append(*data_shared);
           }
 
-          LOG_DEBUG_FMT(
+          LOG_INFO_FMT(
             "Batching {} ({})", last_replicated + offset, data_shared->size());
 
           batch.emplace_back(
@@ -964,6 +972,11 @@ namespace kv
         next_last_replicated = last_replicated + batch.size();
 
         replication_view = term;
+
+        if (consensus->type() == ConsensusType::BFT)
+        {
+          last_replicated = next_last_replicated;
+        }
       }
 
       if (c->replicate(batch, replication_view))
@@ -971,7 +984,8 @@ namespace kv
         std::lock_guard<SpinLock> vguard(version_lock);
         if (
           last_replicated == previous_last_replicated &&
-          previous_rollback_count == rollback_count)
+          previous_rollback_count == rollback_count &&
+          consensus->type() != ConsensusType::BFT)
         {
           last_replicated = next_last_replicated;
         }

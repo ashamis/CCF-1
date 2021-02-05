@@ -150,6 +150,7 @@ namespace ccf
         const auto allowed_verbs = endpoints.get_allowed_verbs(*ctx);
         if (allowed_verbs.empty())
         {
+          LOG_INFO_FMT("exiting early, reserved:{}", reserved);
           ctx->set_error(
             HTTP_STATUS_NOT_FOUND,
             ccf::errors::ResourceNotFound,
@@ -176,6 +177,7 @@ namespace ccf
               "Allowed methods for '{}' are: {}.",
               ctx->get_method(),
               allow_header_value));
+          LOG_INFO_FMT("exiting early, reserved:{}", reserved);
           return ctx->serialise_response();
         }
       }
@@ -206,6 +208,7 @@ namespace ccf
           endpoint->authn_policies.back()->set_unauthenticated_error(
             ctx, std::move(auth_error_reason));
           update_metrics(ctx, metrics);
+          LOG_INFO_FMT("exiting early, reserved:{}", reserved);
           return ctx->serialise_response();
         }
       }
@@ -240,6 +243,7 @@ namespace ccf
                    ExecuteOutsideConsensus::Locally))))
             {
               ctx->session->is_forwarding = true;
+              LOG_INFO_FMT("exiting early, reserved:{}", reserved);
               return forward_or_redirect_json(ctx, endpoint);
             }
             break;
@@ -248,6 +252,7 @@ namespace ccf
           case ForwardingRequired::Always:
           {
             ctx->session->is_forwarding = true;
+            LOG_INFO_FMT("exiting early, reserved:{}", reserved);
             return forward_or_redirect_json(ctx, endpoint);
           }
         }
@@ -276,12 +281,13 @@ namespace ccf
           if (!ctx->should_apply_writes())
           {
             update_metrics(ctx, metrics);
+            LOG_INFO_FMT("exiting early, reserved:{}", reserved);
             return ctx->serialise_response();
           }
 
           kv::CommitSuccess commit_success;
 
-          LOG_DEBUG_FMT(
+          LOG_INFO_FMT(
             "2.1 AAAAAAA term:{}, version:{}, reserved:{}",
             tx.get_term(),
             tx.get_version(),
@@ -289,7 +295,8 @@ namespace ccf
           if (reserved != -1)
           {
             auto f = [&]() {
-              return tables.next_version();
+              LOG_INFO_FMT("Manually setting version:{}", reserved);
+              tables.next_version();
               return reserved;
             };
             commit_success = tx.commit(f);
@@ -336,6 +343,11 @@ namespace ccf
 
             case kv::CommitSuccess::CONFLICT:
             {
+              LOG_INFO_FMT("We have a conflict");
+              if (!is_primary && attempts > 20)
+              {
+                throw std::logic_error("foobar");
+              }
               break;
             }
 
@@ -584,7 +596,7 @@ namespace ccf
       // open. The backup should ideally trigger a view change here.
       if (!is_open(tx))
       {
-        throw std::logic_error("Transaction failed");
+        //throw std::logic_error("Transaction failed");
       }
 
       kv::Version version = kv::NoVersion;
