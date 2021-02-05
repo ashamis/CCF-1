@@ -1358,12 +1358,14 @@ namespace aft
         std::unique_ptr<threading::Tmsg<AsyncExecution>>&& msg_,
         kv::Version last_idx_,
         kv::Version commit_idx_,
+        uint16_t home_thread_,
         std::shared_ptr<AsyncExecutionCtx> ctx_) :
         self(self_),
         ds(std::move(ds_)),
         msg(std::move(msg_)),
         last_idx(last_idx_),
         commit_idx(commit_idx_),
+        home_thread(home_thread_),
         ctx(ctx_)
       {}
 
@@ -1372,8 +1374,11 @@ namespace aft
       std::unique_ptr<threading::Tmsg<AsyncExecution>> msg;
       kv::Version last_idx;
       kv::Version commit_idx;
+      uint16_t home_thread;
       std::shared_ptr<AsyncExecutionCtx> ctx;
     };
+
+    uint64_t next_exec_thread = 0;
 
     bool execute_append_entries(
       std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
@@ -1528,31 +1533,41 @@ namespace aft
                   self->executor->commit_replayed_request(
                     msg->data.ds->get_tx(),
                     self->request_tracker,
-                    self->state->last_idx,
-                    self->state->commit_idx);
+                    msg->data.last_idx,
+                    msg->data.commit_idx);
 
-                  --msg->data.ctx->pending_cbs;
-                  LOG_INFO_FMT(
-                    "TTTTT running execute async pending_cbs:{}",
-                    msg->data.ctx->pending_cbs);
-                  if (msg->data.ctx->pending_cbs == 0)
-                  {
-                    LOG_INFO_FMT(
-                      "TTTTT continue running pending_cbs:{}",
-                      msg->data.ctx->pending_cbs);
-                    self->execute_append_entries_cb_aaa(
-                      std::move(msg->data.ctx->msg));
-                  }
+                  msg->reset_cb(
+                    [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
+                      auto self = msg->data.self;
+                      --msg->data.ctx->pending_cbs;
+                      LOG_INFO_FMT(
+                        "TTTTT running execute async pending_cbs:{}",
+                        msg->data.ctx->pending_cbs);
+                      if (msg->data.ctx->pending_cbs == 0)
+                      {
+                        LOG_INFO_FMT(
+                          "TTTTT continue running pending_cbs:{}",
+                          msg->data.ctx->pending_cbs);
+                        self->execute_append_entries_cb_aaa(
+                          std::move(msg->data.ctx->msg));
+                      }
+                    });
+                  uint16_t home_thread = msg->data.home_thread;
+                  threading::ThreadMessaging::thread_messaging.add_task(
+                    home_thread, std::move(msg));
                 },
                 this,
                 std::move(ds),
                 std::move(msg),
                 state->last_idx,
                 state->commit_idx,
+                threading::get_current_thread_id(),
                 async_exec);
 
               threading::ThreadMessaging::thread_messaging.add_task(
-                threading::get_current_thread_id(), std::move(tmsg));
+                threading::ThreadMessaging::get_execution_thread(
+                  ++next_exec_thread),
+                std::move(tmsg));
               ++async_exec->pending_cbs;
               LOG_INFO_FMT("TTTTT running async pending_cbs:{}", async_exec->pending_cbs);
               // TODO: release lock here
