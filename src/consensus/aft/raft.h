@@ -1580,7 +1580,8 @@ namespace aft
                     msg->data.ds->get_request(),
                     self->request_tracker,
                     msg->data.last_idx,
-                    msg->data.commit_idx);
+                    msg->data.commit_idx,
+                    msg->data.ds->get_max_conflict_version());
 
                   msg->reset_cb(
                     [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {

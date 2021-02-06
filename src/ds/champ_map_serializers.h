@@ -17,10 +17,11 @@ namespace champ
   struct VersionV
   {
     Version version;
+    Version read_version;
     V value;
 
     VersionV() : version(std::numeric_limits<Version>::min()) {}
-    VersionV(Version ver, V val) : version(ver), value(val) {}
+    VersionV(Version ver, Version read_ver, V val) : version(ver), read_version(read_ver), value(val) {}
   };
 
   namespace serialisers

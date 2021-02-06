@@ -139,7 +139,7 @@ namespace kv::untyped
           // Get the value from the current state.
           auto search = current->state.get(it->first);
 
-          if (it->second == NoVersion)
+          if (std::get<0>(it->second) == NoVersion)
           {
             // If we depend on the key not existing, it must be absent.
             if (search.has_value())
@@ -152,7 +152,8 @@ namespace kv::untyped
           {
             // If we depend on the key existing, it must be present and have the
             // version that we expect.
-            if (!search.has_value() || (it->second != search.value().version))
+            if (!search.has_value() || (std::get<0>(it->second) != search.value().version || std::get<1>(it->second) != search.value().read_version))
+
             {
               LOG_DEBUG_FMT("Read depends on invalid version of entry");
               return false;
@@ -176,36 +177,67 @@ namespace kv::untyped
           for (auto it = change_set.reads.begin(); it != change_set.reads.end();
                ++it)
           {
-            auto search = current->state.get(it->first);
+            auto search = state.get(it->first);
             LOG_INFO_FMT(
-              "JJJJJJJJ 1 - version:{}, it->second.has_value():{}",
+              "JJJJJJJJ 1 - version:{}, read_version:{}, it->second.has_value():{}",
               search->version,
+              search->read_version,
               search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
             }
+            /*
+            if (max_conflict_version < search->read_version && search.has_value())
+            {
+              max_conflict_version = search->read_version;
+            }
+            */
           }
 
           for (auto it = change_set.writes.begin();
                it != change_set.writes.end();
                ++it)
           {
-            auto search = current->state.get(it->first);
+            auto search = state.get(it->first);
             LOG_INFO_FMT(
-              "JJJJJJJJ 2 - version:{} it->second.has_value():{}",
+              "JJJJJJJJ 2 - version:{}, read_version:{}, it->second.has_value():{}",
               search->version,
+              search->read_version,
               search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
             }
+            if (max_conflict_version < search->read_version && search.has_value())
+            {
+              max_conflict_version = search->read_version;
+            }
           }
         }
+
+        for (auto it = change_set.reads.begin(); it != change_set.reads.end();
+             ++it)
+        {
+            auto search = state.get(it->first);
+            //search->version = v;
+            if (!search.has_value())
+            {
+              LOG_INFO_FMT("Does not exist");
+              continue;
+              //throw std::logic_error("should have value");
+            }
+            state = state.put(it->first, VersionV{search->version, v, search->value});
+            LOG_INFO_FMT("updating version from:{}, to:{}", search->version, v);
+        }
+
 
         if (change_set.writes.empty())
         {
           commit_version = change_set.start_version;
+
+          map.roll.commits->insert_back(map.roll.create_new_local_commit(
+            commit_version, std::move(state), change_set.writes));
           return;
         }
 
@@ -220,7 +252,7 @@ namespace kv::untyped
           {
             // Write the new value with the global version.
             changes = true;
-            state = state.put(it->first, VersionV{v, it->second.value()});
+            state = state.put(it->first, VersionV{v, v, it->second.value()});
           }
           else
           {
@@ -230,7 +262,7 @@ namespace kv::untyped
             if (search.has_value())
             {
               changes = true;
-              state = state.put(it->first, VersionV{-v, {}});
+              state = state.put(it->first, VersionV{-v, -v, {}});
             }
           }
         }
@@ -345,7 +377,7 @@ namespace kv::untyped
         for (auto it = change_set.reads.begin(); it != change_set.reads.end();
              ++it)
         {
-          s.serialise_read(it->first, it->second);
+          s.serialise_read(it->first, std::get<0>(it->second), std::get<1>(it->second));
         }
       }
       else
@@ -490,7 +522,7 @@ namespace kv::untyped
       for (size_t i = 0; i < ctr; ++i)
       {
         auto r = d.deserialise_read();
-        change_set.reads[std::get<0>(r)] = std::get<1>(r);
+        change_set.reads[std::get<0>(r)] = std::make_tuple(std::get<1>(r), std::get<2>(r));
       }
 
       ctr = d.deserialise_write_header();

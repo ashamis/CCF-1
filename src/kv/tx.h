@@ -226,7 +226,9 @@ namespace kv
      *
      * @return transaction outcome
      */
-    CommitSuccess commit( std::function<Version()> f = nullptr)
+    CommitSuccess commit(
+      std::function<Version()> f = nullptr,
+      kv::Version replicated_max_conflict_version = -1)
     {
       if (committed)
         throw std::logic_error("Transaction already committed");
@@ -278,6 +280,16 @@ namespace kv
       {
         committed = true;
         std::tie(version, max_conflict_version) = c.value();
+
+        LOG_INFO_FMT("replicated_max_conflict_version: {}", replicated_max_conflict_version);
+
+        if (
+          version > max_conflict_version &&
+          version > replicated_max_conflict_version &&
+          replicated_max_conflict_version != -1)
+        {
+          max_conflict_version = replicated_max_conflict_version;
+        }
 
         // From here, we have received a unique commit version and made
         // modifications to our local kv. If we fail in any way, we cannot

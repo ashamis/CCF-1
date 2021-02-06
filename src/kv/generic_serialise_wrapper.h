@@ -147,10 +147,11 @@ namespace kv
       serialise_internal(ctr);
     }
 
-    void serialise_read(const SerialisedKey& k, const Version& version)
+    void serialise_read(const SerialisedKey& k, const Version& version, const Version& read_version)
     {
       serialise_internal_pre_serialised(k);
       serialise_internal(version);
+      serialise_internal(read_version);
     }
 
     void serialise_write(const SerialisedKey& k, const SerialisedValue& v)
@@ -405,10 +406,11 @@ namespace kv
       return current_reader->template read_next<uint64_t>();
     }
 
-    std::tuple<SerialisedKey, Version> deserialise_read()
+    std::tuple<SerialisedKey, Version, Version> deserialise_read()
     {
       return {
         current_reader->template read_next_pre_serialised<SerialisedKey>(),
+        current_reader->template read_next<Version>(),
         current_reader->template read_next<Version>()};
     }
 
