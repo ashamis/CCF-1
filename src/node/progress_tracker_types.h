@@ -145,13 +145,15 @@ namespace ccf
       if (r != kv::CommitSuccess::OK)
       {
         LOG_FAIL_FMT(
-          "Failed to write nonces, view:{}, seqno:{}",
+          "Failed to write nonces, view:{}, seqno:{}, r:{}",
           nonces.tx_id.term,
-          nonces.tx_id.version);
+          nonces.tx_id.version,
+          r);
         throw ccf::ccf_logic_error(fmt::format(
-          "Failed to write nonces, view:{}, seqno:{}",
+          "Failed to write nonces, view:{}, seqno:{}, r:{}",
           nonces.tx_id.term,
-          nonces.tx_id.version));
+          nonces.tx_id.version,
+          r));
       }
     }
 

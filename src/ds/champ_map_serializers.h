@@ -19,7 +19,7 @@ namespace champ
     Version version;
     V value;
 
-    VersionV() = default;
+    VersionV() : version(std::numeric_limits<Version>::min()) {}
     VersionV(Version ver, V val) : version(ver), value(val) {}
   };
 

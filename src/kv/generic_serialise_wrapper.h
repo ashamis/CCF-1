@@ -211,7 +211,7 @@ namespace kv
       std::vector<uint8_t> encrypted_private_domain(
         serialised_private_domain.size());
 
-      LOG_INFO_FMT("NNNNNNNN plain:{}, additional:{}", serialised_private_domain, serialised_public_domain);
+      LOG_DEBUG_FMT("NNNNNNNN plain:{}, additional:{}", serialised_private_domain, serialised_public_domain);
         
       crypto_util->encrypt(
         serialised_private_domain,

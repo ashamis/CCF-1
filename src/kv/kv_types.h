@@ -462,8 +462,8 @@ namespace kv
     virtual ~AbstractCommitter() = default;
 
     virtual bool has_writes() = 0;
-    virtual bool prepare(Version& max_conflict_version) = 0;
-    virtual void commit(Version v) = 0;
+    virtual bool prepare() = 0;
+    virtual void commit(Version v, Version& max_conflict_version, bool skip_max_conflict) = 0;
     virtual ConsensusHookPtr post_commit() = 0;
   };
 

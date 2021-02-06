@@ -725,6 +725,7 @@ namespace aft
 
       if (consensus_type == ConsensusType::BFT)
       {
+        /*
         auto time = threading::ThreadMessaging::thread_messaging
                       .get_current_time_offset();
         request_tracker->tick(time);
@@ -789,6 +790,7 @@ namespace aft
             guard.lock();
           }
         }
+        */
       }
 
       if (replica_state == Leader)
@@ -955,6 +957,7 @@ namespace aft
       }
 
       // Check if there have been too many entried since the last signature
+      /*
       if (
         sig_tx_interval != 0 &&
         last_sig_seqno + sig_tx_interval * wait_factor <
@@ -968,6 +971,7 @@ namespace aft
           state->last_idx);
         return true;
       }
+      */
 
       return false;
     }
@@ -1428,7 +1432,8 @@ namespace aft
           return false;
         }
 
-        if (std::get<0>(append_entries.front())->support_asyc_execution() && std::get<0>(append_entries.front())->get_max_conflict_version() > before_state_idx)
+        // TODO: do not use before_start_idx we need to make sure that we are less than the most recent running
+        if (std::get<0>(append_entries.front())->support_asyc_execution() && std::get<0>(append_entries.front())->get_max_conflict_version() >= before_state_idx)
         {
           if (!pending_requests.empty())
           {
@@ -1443,7 +1448,8 @@ namespace aft
             LOG_INFO_FMT("return break async");
             return false;
           }
-          before_state_idx = state->last_idx;
+          // TODO: i think this is wrong, we should not reset this
+          //before_state_idx = state->last_idx;
         }
 
         is_first = false;
@@ -1453,6 +1459,8 @@ namespace aft
         append_entries.pop_front();
         auto& [ds, i] = ae;
         state->last_idx = i;
+
+        uint64_t max_conflict_version = ds->get_max_conflict_version();
 
         kv::ApplySuccess apply_success = ds->execute();
         if (apply_success == kv::ApplySuccess::FAILED)
@@ -1610,7 +1618,7 @@ namespace aft
                 std::move(tmsg));
 */
               ++async_exec->pending_cbs;
-              LOG_INFO_FMT("TTTTT running async pending_cbs:{}, last_idx:{}", async_exec->pending_cbs, state->last_idx);
+              LOG_INFO_FMT("TTTTT running async pending_cbs:{}, last_idx:{}, max_conflict_version:{}", async_exec->pending_cbs, state->last_idx, max_conflict_version);
               // TODO: release lock here
 
               //tmsg->cb(std::move(tmsg));

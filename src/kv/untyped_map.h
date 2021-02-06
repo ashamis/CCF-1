@@ -109,7 +109,7 @@ namespace kv::untyped
         return committed_writes || change_set.has_writes();
       }
 
-      bool prepare(kv::Version& max_conflict_version) override
+      bool prepare() override
       {
         if (change_set.writes.empty())
           return true;
@@ -157,19 +157,52 @@ namespace kv::untyped
               LOG_DEBUG_FMT("Read depends on invalid version of entry");
               return false;
             }
+          }
+        }
+        return true;
+      }
 
-            if (max_conflict_version < search->version)
+      void commit(Version v, kv::Version& max_conflict_version, bool skip_max_conflict) override
+      {
+        auto& roll = map.get_roll();
+        auto current = roll.commits->get_tail();
+        auto state = current->state;
+
+
+        // If we have iterated over the map, check for a global version match.
+
+        if (!skip_max_conflict)
+        {
+          for (auto it = change_set.reads.begin(); it != change_set.reads.end();
+               ++it)
+          {
+            auto search = current->state.get(it->first);
+            LOG_INFO_FMT(
+              "JJJJJJJJ 1 - version:{}, it->second.has_value():{}",
+              search->version,
+              search.has_value());
+            if (max_conflict_version < search->version && search.has_value())
+            {
+              max_conflict_version = search->version;
+            }
+          }
+
+          for (auto it = change_set.writes.begin();
+               it != change_set.writes.end();
+               ++it)
+          {
+            auto search = current->state.get(it->first);
+            LOG_INFO_FMT(
+              "JJJJJJJJ 2 - version:{} it->second.has_value():{}",
+              search->version,
+              search.has_value());
+            if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
             }
           }
         }
 
-        return true;
-      }
-
-      void commit(Version v) override
-      {
         if (change_set.writes.empty())
         {
           commit_version = change_set.start_version;
@@ -179,9 +212,6 @@ namespace kv::untyped
         // Record our commit time.
         commit_version = v;
         committed_writes = true;
-
-        auto& roll = map.get_roll();
-        auto state = roll.commits->get_tail()->state;
 
         for (auto it = change_set.writes.begin(); it != change_set.writes.end();
              ++it)
@@ -378,13 +408,13 @@ namespace kv::untyped
         return true;
       }
 
-      bool prepare(kv::Version&) override
+      bool prepare() override
       {
         // Snapshots never conflict
         return true;
       }
 
-      void commit(Version) override
+      void commit(Version, kv::Version&, bool) override
       {
         // Version argument is ignored. The version of the roll after the
         // snapshot is applied depends on the version of the map at which the

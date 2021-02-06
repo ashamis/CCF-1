@@ -339,6 +339,10 @@ namespace kv
       {
         LOG_FAIL_FMT("Failed to deserialise");
         LOG_DEBUG_FMT("Signature in transaction {} failed to verify", v);
+        for (int i = 0; i < 100'000'000; ++i)
+        {
+          
+        }
         throw std::logic_error(
           "Failed to verify signature, view-changes not implemented");
         return ApplySuccess::FAILED;

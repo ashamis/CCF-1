@@ -52,6 +52,8 @@ namespace kv
     Version version = 0;
     bool has_writes = false;
 
+    kv::Version max_conflict_version = kv::NoVersion;
+
     std::map<std::string, std::unique_ptr<AbstractCommitter>> views;
     for (const auto& [map_name, mc] : changes)
     {
@@ -62,17 +64,27 @@ namespace kv
     {
       if (it->second.changeset->has_writes())
       {
-        it->second.map->lock();
         has_writes = true;
       }
+        it->second.map->lock();
+        LOG_INFO_FMT(
+          "locking table - {}", it->first);
+
+        /*
+        if (it->first.compare("public:ccf.gov.aft.requests") &&
+        it->second.changeset->has_writes())
+        {
+          LOG_INFO_FMT("changes table - {}, read_version:{}", it->first,
+        it->second.changeset->start_version); max_conflict_version =
+            std::max(max_conflict_version, it->second.changeset->start_version);
+        }
+        */
     }
 
     bool ok = true;
-    kv::Version max_conflict_version = kv::NoVersion;
-
     for (auto it = views.begin(); it != views.end(); ++it)
     {
-      if (!it->second->prepare(max_conflict_version))
+      if (!it->second->prepare())
       {
         ok = false;
         break;
@@ -126,7 +138,10 @@ namespace kv
 
       for (auto it = views.begin(); it != views.end(); ++it)
       {
-        it->second->commit(version);
+        LOG_INFO_FMT("Name_maybe:{}", it->first);
+        bool skip_max_conflict =
+          (it->first.compare("public:ccf.gov.aft.requests") == 0);
+        it->second->commit(version, max_conflict_version, skip_max_conflict);
       }
 
       // Collect ConsensusHooks
@@ -142,7 +157,7 @@ namespace kv
 
     for (auto it = changes.begin(); it != changes.end(); ++it)
     {
-      if (it->second.changeset->has_writes())
+      //if (it->second.changeset->has_writes())
       {
         it->second.map->unlock();
       }
