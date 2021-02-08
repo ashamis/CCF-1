@@ -704,7 +704,6 @@ namespace aft
           pending_executions.pop_front();
           pe->execute();
         }
-
       }
       else
       {
@@ -725,7 +724,6 @@ namespace aft
 
       if (consensus_type == ConsensusType::BFT)
       {
-        /*
         auto time = threading::ThreadMessaging::thread_messaging
                       .get_current_time_offset();
         request_tracker->tick(time);
@@ -790,7 +788,6 @@ namespace aft
             guard.lock();
           }
         }
-        */
       }
 
       if (replica_state == Leader)
@@ -957,7 +954,6 @@ namespace aft
       }
 
       // Check if there have been too many entried since the last signature
-      /*
       if (
         sig_tx_interval != 0 &&
         last_sig_seqno + sig_tx_interval * wait_factor <
@@ -971,7 +967,6 @@ namespace aft
           state->last_idx);
         return true;
       }
-      */
 
       return false;
     }

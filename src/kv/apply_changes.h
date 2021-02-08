@@ -125,6 +125,11 @@ namespace kv
       // Get the version number to be used for this commit.
       version = f();
 
+      if (!new_maps.empty() && version > 0)
+      {
+        max_conflict_version = version - 1;
+      }
+
       // Transfer ownership of these new maps to their target stores, iff we
       // have writes to them
       for (const auto& [map_name, map_ptr] : new_maps)

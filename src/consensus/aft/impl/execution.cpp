@@ -84,7 +84,7 @@ namespace aft
 
     ctx->is_create_request = is_create_request;
     ctx->execute_on_node = true;
-    ctx->set_apply_writes(true);
+    //ctx->set_apply_writes(true);
 
     enclave::RpcHandler::ProcessBftResp rep =
       frontend->process_bft(ctx, last_idx, max_conflict_version);

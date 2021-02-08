@@ -478,6 +478,8 @@ namespace ccf
         HTTP_GET,
         json_read_only_adapter(get_nodes),
         no_auth_required)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Primary)
         .set_auto_schema<GetNodes>()
         .install();
 
@@ -525,6 +527,8 @@ namespace ccf
         json_read_only_adapter(get_node_info),
         no_auth_required)
         .set_auto_schema<void, GetNode::Out>()
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .install();
 
       auto get_self_node = [this](ReadOnlyEndpointContext& args) {
@@ -552,6 +556,8 @@ namespace ccf
       make_read_only_endpoint(
         "network/nodes/self", HTTP_GET, get_self_node, no_auth_required)
         .set_forwarding_required(ForwardingRequired::Never)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .install();
 
       auto get_primary_node = [this](ReadOnlyEndpointContext& args) {
@@ -584,6 +590,8 @@ namespace ccf
       make_read_only_endpoint(
         "network/nodes/primary", HTTP_GET, get_primary_node, no_auth_required)
         .set_forwarding_required(ForwardingRequired::Never)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .install();
 
       auto is_primary = [this](ReadOnlyEndpointContext& args) {
@@ -612,6 +620,8 @@ namespace ccf
       make_read_only_endpoint(
         "primary", HTTP_HEAD, is_primary, no_auth_required)
         .set_forwarding_required(ForwardingRequired::Never)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .install();
 
       auto consensus_config = [this](CommandEndpointContext& args) {
@@ -638,6 +648,8 @@ namespace ccf
       make_command_endpoint(
         "config", HTTP_GET, consensus_config, no_auth_required)
         .set_forwarding_required(ForwardingRequired::Never)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .install();
 
       auto memory_usage = [](CommandEndpointContext& args) {
@@ -664,6 +676,8 @@ namespace ccf
 
       make_command_endpoint("memory", HTTP_GET, memory_usage, no_auth_required)
         .set_forwarding_required(ForwardingRequired::Never)
+        .set_execute_outside_consensus(
+          ccf::endpoints::ExecuteOutsideConsensus::Locally)
         .set_auto_schema<MemoryUsage>()
         .install();
     }
