@@ -104,11 +104,6 @@ namespace kv
       serialise_internal(tx_id.version);
       serialise_internal(max_conflict_version);
       //serialise_internal(0);
-      LOG_INFO_FMT(
-        "XXXXXXXX is_snapshot:{}, version:{}, max_conflict_version:{}",
-        is_snapshot,
-        tx_id.version,
-        max_conflict_version);
     }
 
     void start_map(const std::string& name, SecurityDomain domain)
@@ -212,8 +207,6 @@ namespace kv
       std::vector<uint8_t> encrypted_private_domain(
         serialised_private_domain.size());
 
-      LOG_DEBUG_FMT("NNNNNNNN plain:{}, additional:{}", serialised_private_domain, serialised_public_domain);
-        
       crypto_util->encrypt(
         serialised_private_domain,
         serialised_public_domain,

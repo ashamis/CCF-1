@@ -660,7 +660,7 @@ namespace aft
 
           // TODO: fix the thread_id
           threading::ThreadMessaging::thread_messaging.add_task(
-            2, std::move(msg_aaaa));
+            ++next_exec_thread, std::move(msg_aaaa));
         }
         else if (!is_execution_pending)
         {
@@ -673,7 +673,6 @@ namespace aft
       }
       catch (const std::logic_error& err)
       {
-        LOG_INFO_FMT("error for msg type:{}", type);
         LOG_FAIL_EXC(err.what());
       }
 
@@ -1302,7 +1301,6 @@ namespace aft
       std::unique_ptr<threading::Tmsg<AsyncExecution>> msg)
     {
       auto self = msg->data.self;
-      LOG_INFO_FMT("start new execution");
       self->execute_append_entries_cb_aaa(std::move(msg));
     }
 
@@ -1313,10 +1311,8 @@ namespace aft
       bool result = msg->data.self->execute_append_entries(msg);
       if (!result)
       {
-        LOG_INFO_FMT("returned early from execution");
         return;
       }
-      LOG_INFO_FMT("finished execution");
 
       auto msg_ret = std::make_unique<threading::Tmsg<AsyncExecutionRet>>(
         continue_execution, self);
@@ -1398,7 +1394,6 @@ namespace aft
       std::unique_lock<SpinLock> guard(state->lock);
       while(!append_entries.empty())
       {
-        LOG_INFO_FMT("support async - {}", std::get<0>(append_entries.front())->support_asyc_execution());
         if (must_break)
         {
           for (auto& tmsg : pending_requests)
@@ -1409,7 +1404,6 @@ namespace aft
               std::move(tmsg));
           }
 
-          LOG_INFO_FMT("return must break");
           return false;
         }
 
@@ -1423,7 +1417,6 @@ namespace aft
               std::move(tmsg));
           }
 
-          LOG_INFO_FMT("return break async");
           return false;
         }
 
@@ -1440,7 +1433,6 @@ namespace aft
                 std::move(tmsg));
             }
 
-            LOG_INFO_FMT("return break async");
             return false;
           }
           // TODO: i think this is wrong, we should not reset this
@@ -1455,7 +1447,7 @@ namespace aft
         auto& [ds, i] = ae;
         state->last_idx = i;
 
-        uint64_t max_conflict_version = ds->get_max_conflict_version();
+        //uint64_t max_conflict_version = ds->get_max_conflict_version();
 
         kv::ApplySuccess apply_success = ds->execute();
         if (apply_success == kv::ApplySuccess::FAILED)
@@ -1507,7 +1499,6 @@ namespace aft
 
           case kv::ApplySuccess::PASS_SIGNATURE:
           {
-            LOG_INFO_FMT("Deserialising signature at {}", i);
             auto prev_lci = last_committable_index();
             committable_indices.push_back(i);
 
@@ -1570,7 +1561,6 @@ namespace aft
               auto tmsg = std::make_unique<threading::Tmsg<AsyncExecTxMsg>>(
                 [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
                   auto self = msg->data.self;
-                  LOG_INFO_FMT("running execute async last_idx:{}", msg->data.last_idx);
                   self->executor->commit_replayed_request(
                     msg->data.ds->get_request(),
                     self->request_tracker,
@@ -1582,14 +1572,8 @@ namespace aft
                     [](std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>> msg) {
                       auto self = msg->data.self;
                       --msg->data.ctx->pending_cbs;
-                      LOG_INFO_FMT(
-                        "TTTTT running execute async pending_cbs:{}",
-                        msg->data.ctx->pending_cbs);
                       if (msg->data.ctx->pending_cbs == 0)
                       {
-                        LOG_INFO_FMT(
-                          "TTTTT continue running pending_cbs:{}",
-                          msg->data.ctx->pending_cbs);
                         self->execute_append_entries_cb_aaa(
                           std::move(msg->data.ctx->msg));
                       }
@@ -1614,7 +1598,6 @@ namespace aft
                 std::move(tmsg));
 */
               ++async_exec->pending_cbs;
-              LOG_INFO_FMT("TTTTT running async pending_cbs:{}, last_idx:{}, max_conflict_version:{}", async_exec->pending_cbs, state->last_idx, max_conflict_version);
               // TODO: release lock here
 
               //tmsg->cb(std::move(tmsg));
@@ -1643,11 +1626,8 @@ namespace aft
 
       if (async_exec->pending_cbs == 0)
       {
-        bool ret = execute_append_entries_finish(confirm_evidence, r);
-        LOG_INFO_FMT("return end pending == 0, ret:{}", ret);
-        return true;
+        return execute_append_entries_finish(confirm_evidence, r);
       }
-      LOG_INFO_FMT("return end true");
       return false;
     }
 
@@ -1778,7 +1758,6 @@ namespace aft
           r.from_node, r.signature_size, r.sig, r.root);
         if (!res)
         {
-          LOG_INFO_FMT("AAAAAA did not verify, from:{}", r.from_node);
           return false;
         }
       }

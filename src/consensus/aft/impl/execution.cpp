@@ -84,7 +84,6 @@ namespace aft
 
     ctx->is_create_request = is_create_request;
     ctx->execute_on_node = true;
-    //ctx->set_apply_writes(true);
 
     enclave::RpcHandler::ProcessBftResp rep =
       frontend->process_bft(ctx, last_idx, max_conflict_version);
@@ -129,14 +128,6 @@ namespace aft
     kv::Consensus::SeqNo committed_seqno,
     kv::Consensus::SeqNo max_conflict_version)
   {
-    /*
-    auto aft_requests = tx.rw<aft::RequestsMap>(ccf::Tables::AFT_REQUESTS);
-    auto req_v = aft_requests->get(0);
-    CCF_ASSERT(
-      req_v.has_value(),
-      "Deserialised request but it was not found in the requests map");
-    Request request = req_v.value();
-    */
 
     auto ctx = create_request_ctx(request);
 

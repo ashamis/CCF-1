@@ -530,8 +530,6 @@ namespace kv
 
   class Tx;
 
-
-
   class AbstractExecutionWrapper
   {
   public:
