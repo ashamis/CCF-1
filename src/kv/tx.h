@@ -251,13 +251,7 @@ namespace kv
 
       auto c = apply_changes(
         all_changes,
-        f == nullptr ?
-          [store]() {
-            kv::Version v = store->next_version();
-            LOG_INFO_FMT("setting v:{}", v);
-            return v;
-          } :
-          f,
+        f == nullptr ? [store]() { return store->next_version(); } : f,
         hooks,
         created_maps);
 
@@ -280,8 +274,6 @@ namespace kv
       {
         committed = true;
         std::tie(version, max_conflict_version) = c.value();
-
-        LOG_INFO_FMT("replicated_max_conflict_version: {}", replicated_max_conflict_version);
 
         if (
           version > max_conflict_version &&

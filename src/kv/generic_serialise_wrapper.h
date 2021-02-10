@@ -104,11 +104,6 @@ namespace kv
       serialise_internal(tx_id.version);
       serialise_internal(max_conflict_version);
       //serialise_internal(0);
-      LOG_INFO_FMT(
-        "XXXXXXXX is_snapshot:{}, version:{}, max_conflict_version:{}",
-        is_snapshot,
-        tx_id.version,
-        max_conflict_version);
     }
 
     void start_map(const std::string& name, SecurityDomain domain)

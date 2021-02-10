@@ -648,11 +648,9 @@ namespace kv
         return ApplySuccess::FAILED;
       }
       std::tie(v, max_conflict_version) = v_.value();
-      LOG_INFO_FMT("LLLLLLLLLL version:{}, max_conflict:{}", v, max_conflict_version);
 
       // Throw away any local commits that have not propagated via the
       // consensus.
-      LOG_DEBUG_FMT("DDDDD value of v:{}", v);
       rollback(v - 1);
 
       if (strict_versions && !ignore_strict_versions)
@@ -894,7 +892,7 @@ namespace kv
         return CommitSuccess::OK;
       }
 
-      LOG_INFO_FMT(
+      LOG_DEBUG_FMT(
         "Store::commit {}{}",
         txid.version,
         (globally_committable ? " globally_committable" : ""));
@@ -932,8 +930,6 @@ namespace kv
           auto search = pending_txs.find(last_replicated + offset);
           if (search == pending_txs.end())
           {
-            LOG_INFO_FMT(
-              "could not find entry, {}", last_replicated + offset);
             break;
           }
 
@@ -956,7 +952,7 @@ namespace kv
             h->append(*data_shared);
           }
 
-          LOG_INFO_FMT(
+          LOG_DEBUG_FMT(
             "Batching {} ({})", last_replicated + offset, data_shared->size());
 
           batch.emplace_back(

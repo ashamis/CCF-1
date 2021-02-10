@@ -179,11 +179,6 @@ namespace kv::untyped
                ++it)
           {
             auto search = state.get(it->first);
-            LOG_INFO_FMT(
-              "JJJJJJJJ 1 - version:{}, read_version:{}, it->second.has_value():{}",
-              search->version,
-              search->read_version,
-              search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
@@ -201,11 +196,6 @@ namespace kv::untyped
                ++it)
           {
             auto search = state.get(it->first);
-            LOG_INFO_FMT(
-              "JJJJJJJJ 2 - version:{}, read_version:{}, it->second.has_value():{}",
-              search->version,
-              search->read_version,
-              search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
@@ -229,12 +219,10 @@ namespace kv::untyped
             //search->version = v;
             if (!search.has_value())
             {
-              LOG_INFO_FMT("Does not exist");
               continue;
               //throw std::logic_error("should have value");
             }
             state = state.put(it->first, VersionV{search->version, v, search->value});
-            LOG_INFO_FMT("updating version from:{}, to:{}", search->version, v);
         }
 
 

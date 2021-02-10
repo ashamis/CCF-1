@@ -1420,7 +1420,6 @@ namespace aft
       std::unique_lock<SpinLock> guard(state->lock);
       while(!append_entries.empty())
       {
-        LOG_INFO_FMT("async count - {}", pending_requests.size());
         if (!run_sync && must_break)
         {
           for (auto& tmsg : pending_requests)
