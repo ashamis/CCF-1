@@ -67,6 +67,8 @@ namespace kv
         has_writes = true;
       }
         it->second.map->lock();
+        LOG_INFO_FMT(
+          "locking table - {}", it->first);
 
         /*
         if (it->first.compare("public:ccf.gov.aft.requests") &&
@@ -141,6 +143,7 @@ namespace kv
 
       for (auto it = views.begin(); it != views.end(); ++it)
       {
+        LOG_INFO_FMT("Name_maybe:{}", it->first);
         bool skip_max_conflict =
           (it->first.compare("public:ccf.gov.aft.requests") == 0);
         it->second->commit(version, max_conflict_version, skip_max_conflict);

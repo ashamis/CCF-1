@@ -168,6 +168,7 @@ namespace kv::untyped
         auto& roll = map.get_roll();
         auto current = roll.commits->get_tail();
         auto state = current->state;
+        bool is_writing_to_new_key = false;
 
 
         // If we have iterated over the map, check for a global version match.
@@ -178,6 +179,11 @@ namespace kv::untyped
                ++it)
           {
             auto search = state.get(it->first);
+            LOG_INFO_FMT(
+              "JJJJJJJJ 1 - version:{}, read_version:{}, it->second.has_value():{}",
+              search->version,
+              search->read_version,
+              search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
@@ -195,6 +201,11 @@ namespace kv::untyped
                ++it)
           {
             auto search = state.get(it->first);
+            LOG_INFO_FMT(
+              "JJJJJJJJ 2 - version:{}, read_version:{}, it->second.has_value():{}",
+              search->version,
+              search->read_version,
+              search.has_value());
             if (max_conflict_version < search->version && search.has_value())
             {
               max_conflict_version = search->version;
@@ -202,6 +213,11 @@ namespace kv::untyped
             if (max_conflict_version < search->read_version && search.has_value())
             {
               max_conflict_version = search->read_version;
+            }
+
+            if (!search.has_value())
+            {
+              is_writing_to_new_key = true;
             }
           }
         }
@@ -213,10 +229,12 @@ namespace kv::untyped
             //search->version = v;
             if (!search.has_value())
             {
+              LOG_INFO_FMT("Does not exist");
               continue;
               //throw std::logic_error("should have value");
             }
             state = state.put(it->first, VersionV{search->version, v, search->value});
+            LOG_INFO_FMT("updating version from:{}, to:{}", search->version, v);
         }
 
 
@@ -232,6 +250,11 @@ namespace kv::untyped
         // Record our commit time.
         commit_version = v;
         committed_writes = true;
+
+        if (is_writing_to_new_key)
+        {
+          max_conflict_version = std::max(max_conflict_version, v - 1);
+        }
 
         for (auto it = change_set.writes.begin(); it != change_set.writes.end();
              ++it)

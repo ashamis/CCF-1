@@ -272,6 +272,7 @@ namespace ccf
             pre_exec(tx, *ctx.get());
           }
 
+          LOG_INFO_FMT("path:{}", ctx->get_method());
           endpoints.execute_endpoint(endpoint, args);
 
           if (!ctx->should_apply_writes())
