@@ -909,7 +909,7 @@ namespace kv
         {
           // This can happen when a transaction started before a view change,
           // but tries to commit after the view change is complete.
-          LOG_DEBUG_FMT(
+          LOG_INFO_FMT(
             "Want to commit for term {} but term is {}", txid.term, term);
 
           return CommitSuccess::NO_REPLICATE;
@@ -969,7 +969,7 @@ namespace kv
 
         replication_view = term;
 
-        if (consensus->type() == ConsensusType::BFT)
+        if (consensus->type() == ConsensusType::BFT && consensus->is_backup())
         {
           last_replicated = next_last_replicated;
         }
@@ -980,8 +980,8 @@ namespace kv
         std::lock_guard<SpinLock> vguard(version_lock);
         if (
           last_replicated == previous_last_replicated &&
-          previous_rollback_count == rollback_count &&
-          consensus->type() != ConsensusType::BFT)
+          previous_rollback_count == rollback_count/* &&
+          consensus->type() != ConsensusType::BFT*/)
         {
           last_replicated = next_last_replicated;
         }
@@ -989,7 +989,7 @@ namespace kv
       }
       else
       {
-        LOG_DEBUG_FMT("Failed to replicate");
+        LOG_INFO_FMT("Failed to replicate");
         return CommitSuccess::NO_REPLICATE;
       }
     }

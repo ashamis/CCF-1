@@ -137,12 +137,25 @@ namespace ccf
 
     void write_nonces(aft::RevealedNonces& nonces) override
     {
-      kv::Tx tx(&store);
-      auto nonces_tv = tx.rw(revealed_nonces);
+      auto r = kv::CommitSuccess::CONFLICT;
+      for (auto i = 0; i < 32 && r == kv::CommitSuccess::CONFLICT; ++i)
+      {
+        kv::Tx tx(&store);
+        auto nonces_tv = tx.rw(revealed_nonces);
 
-      nonces_tv->put(0, nonces);
-      auto r = tx.commit();
-      if (r != kv::CommitSuccess::OK)
+        nonces_tv->put(0, nonces);
+        r = tx.commit();
+      if (r == kv::CommitSuccess::NO_REPLICATE)
+      {
+        LOG_FAIL_FMT(
+          "Failed to write nonces, view:{}, seqno:{}, r:{}, version:{}",
+          nonces.tx_id.term,
+          nonces.tx_id.version,
+          r,
+          tx.get_version());
+      }
+      }
+      if (r == kv::CommitSuccess::CONFLICT)
       {
         LOG_FAIL_FMT(
           "Failed to write nonces, view:{}, seqno:{}, r:{}",

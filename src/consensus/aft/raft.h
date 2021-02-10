@@ -397,6 +397,12 @@ namespace aft
 
     void add_configuration(Index idx, const Configuration::Nodes& conf)
     {
+      std::unique_lock<SpinLock> guard(state->lock, std::defer_lock);
+      if (consensus_type == ConsensusType::BFT && is_follower())
+      {
+        guard.lock();
+        LOG_INFO_FMT("UUUUUUUUUUU locking");
+      }
       // This should only be called when the spin lock is held.
       configurations.push_back({idx, std::move(conf)});
       backup_nodes.clear();
@@ -465,7 +471,13 @@ namespace aft
         bool globally_committable = is_globally_committable;
 
         if (index != state->last_idx + 1)
+        {
+          LOG_FAIL_FMT(
+            "Failed to replicate index:{} state->last_idx(+1):{}",
+            index,
+            state->last_idx + 1);
           return false;
+        }
 
         LOG_DEBUG_FMT(
           "Replicated on leader {}: {}{} ({} hooks)",
@@ -658,9 +670,22 @@ namespace aft
             this,
             std::move(aee));
 
-          // TODO: fix the thread_id
-          threading::ThreadMessaging::thread_messaging.add_task(
-            ++next_exec_thread, std::move(msg_aaaa));
+          //if (threading::ThreadMessaging::thread_count == 1)
+          {
+            {
+              std::unique_lock<SpinLock> guard(state->lock);
+              LOG_INFO_FMT("ZZZZZZZZZZZZZZZZ");
+              msg_aaaa->data.pending_execution->async_execute();
+            }
+              fn_foobar(std::move(msg_aaaa));
+          }
+          /*
+          else
+          {
+            threading::ThreadMessaging::thread_messaging.add_task(
+              ++next_exec_thread, std::move(msg_aaaa));
+          }
+          */
         }
         else if (!is_execution_pending)
         {
@@ -1388,13 +1413,14 @@ namespace aft
       bool is_first = true;
       bool must_break = false;
       uint64_t before_state_idx = state->last_idx;
+      bool run_sync = threading::ThreadMessaging::thread_count == 1;
 
       std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>> pending_requests;
 
       std::unique_lock<SpinLock> guard(state->lock);
       while(!append_entries.empty())
       {
-        if (must_break)
+        if (!run_sync && must_break)
         {
           for (auto& tmsg : pending_requests)
           {
@@ -1407,7 +1433,7 @@ namespace aft
           return false;
         }
 
-        if (!std::get<0>(append_entries.front())->support_asyc_execution() && !is_first && (async_exec->pending_cbs > 0))
+        if (!run_sync && !std::get<0>(append_entries.front())->support_asyc_execution() && !is_first && (async_exec->pending_cbs > 0))
         {
           for (auto& tmsg : pending_requests)
           {
@@ -1421,7 +1447,7 @@ namespace aft
         }
 
         // TODO: do not use before_start_idx we need to make sure that we are less than the most recent running
-        if (std::get<0>(append_entries.front())->support_asyc_execution() && std::get<0>(append_entries.front())->get_max_conflict_version() >= before_state_idx)
+        if (!run_sync && std::get<0>(append_entries.front())->support_asyc_execution() && std::get<0>(append_entries.front())->get_max_conflict_version() >= before_state_idx)
         {
           if (!pending_requests.empty())
           {
@@ -1590,14 +1616,16 @@ namespace aft
                 threading::get_current_thread_id(),
                 async_exec);
 
+              if (!run_sync)
+              {
                 pending_requests.push_back(std::move(tmsg));
-/*
-              threading::ThreadMessaging::thread_messaging.add_task( 
-                threading::ThreadMessaging::get_execution_thread(
-                  ++next_exec_thread),
-                std::move(tmsg));
-*/
-              ++async_exec->pending_cbs;
+                ++async_exec->pending_cbs;
+              }
+              else
+              {
+                auto cb = tmsg->cb;
+                cb(std::move(tmsg));
+              }
               // TODO: release lock here
 
               //tmsg->cb(std::move(tmsg));
@@ -1619,9 +1647,10 @@ namespace aft
 
       for (auto& tmsg : pending_requests)
       {
-        threading::ThreadMessaging::thread_messaging.add_task(
-          threading::ThreadMessaging::get_execution_thread(++next_exec_thread),
-          std::move(tmsg));
+          threading::ThreadMessaging::thread_messaging.add_task(
+            threading::ThreadMessaging::get_execution_thread(
+              ++next_exec_thread),
+            std::move(tmsg));
       }
 
       if (async_exec->pending_cbs == 0)
