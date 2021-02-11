@@ -1417,7 +1417,12 @@ namespace aft
 
       std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>> pending_requests;
 
-      std::unique_lock<SpinLock> guard(state->lock);
+      std::unique_lock<SpinLock> guard(state->lock, std::defer_lock);
+      if (!run_sync)
+      {
+        guard.lock();
+      }
+
       while(!append_entries.empty())
       {
         if (!run_sync && must_break)
