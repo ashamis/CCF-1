@@ -43,7 +43,8 @@ namespace kv
     std::function<Version()> f,
     kv::ConsensusHookPtrs& hooks,
     const MapCollection& new_maps = {},
-    const std::optional<Version>& new_maps_conflict_version = std::nullopt)
+    const std::optional<Version>& new_maps_conflict_version = std::nullopt,
+    bool track_conflicts = false)
   {
     // All maps with pending writes are locked, transactions are prepared
     // and possibly committed, and then all maps with pending writes are
@@ -62,21 +63,15 @@ namespace kv
 
     for (auto it = changes.begin(); it != changes.end(); ++it)
     {
-      if (it->second.changeset->has_writes())
+      bool changeset_has_writes = it->second.changeset->has_writes();
+      if (changeset_has_writes)
       {
         has_writes = true;
       }
+      if (changeset_has_writes || track_conflicts)
+      {
         it->second.map->lock();
-
-        /*
-        if (it->first.compare("public:ccf.gov.aft.requests") &&
-        it->second.changeset->has_writes())
-        {
-          LOG_INFO_FMT("changes table - {}, read_version:{}", it->first,
-        it->second.changeset->start_version); max_conflict_version =
-            std::max(max_conflict_version, it->second.changeset->start_version);
-        }
-        */
+      }
     }
 
     bool ok = true;
@@ -159,7 +154,7 @@ namespace kv
 
     for (auto it = changes.begin(); it != changes.end(); ++it)
     {
-      //if (it->second.changeset->has_writes())
+      if (it->second.changeset->has_writes() || track_conflicts)
       {
         it->second.map->unlock();
       }

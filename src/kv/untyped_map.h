@@ -169,7 +169,8 @@ namespace kv::untyped
         auto current = roll.commits->get_tail();
         auto state = current->state;
         bool is_writing_to_new_key = false;
-
+        auto consensus = map.store->get_consensus();
+        bool track_commit = consensus != nullptr && map.store->get_consensus()->type() == ConsensusType::BFT;
 
         // If we have iterated over the map, check for a global version match.
 
@@ -212,9 +213,11 @@ namespace kv::untyped
           }
         }
 
-        for (auto it = change_set.reads.begin(); it != change_set.reads.end();
-             ++it)
+        if (track_commit)
         {
+          for (auto it = change_set.reads.begin(); it != change_set.reads.end();
+               ++it)
+          {
             auto search = state.get(it->first);
             //search->version = v;
             if (!search.has_value())
@@ -222,7 +225,9 @@ namespace kv::untyped
               continue;
               //throw std::logic_error("should have value");
             }
-            state = state.put(it->first, VersionV{search->version, v, search->value});
+            state =
+              state.put(it->first, VersionV{search->version, v, search->value});
+          }
         }
 
 
@@ -230,8 +235,11 @@ namespace kv::untyped
         {
           commit_version = change_set.start_version;
 
+          if (track_commit)
+          {
           map.roll.commits->insert_back(map.roll.create_new_local_commit(
             commit_version, std::move(state), change_set.writes));
+          }
           return;
         }
 
