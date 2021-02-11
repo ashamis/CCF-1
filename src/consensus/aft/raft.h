@@ -670,7 +670,7 @@ namespace aft
             this,
             std::move(aee));
 
-          //if (threading::ThreadMessaging::thread_count == 1)
+          if (threading::ThreadMessaging::thread_count == 1)
           {
             {
               std::unique_lock<SpinLock> guard(state->lock);
@@ -679,13 +679,13 @@ namespace aft
             }
               fn_foobar(std::move(msg_aaaa));
           }
-          /*
           else
           {
             threading::ThreadMessaging::thread_messaging.add_task(
-              ++next_exec_thread, std::move(msg_aaaa));
+              threading::ThreadMessaging::get_execution_thread(
+                ++next_exec_thread),
+              std::move(msg_aaaa));
           }
-          */
         }
         else if (!is_execution_pending)
         {
