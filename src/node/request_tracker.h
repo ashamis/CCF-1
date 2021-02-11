@@ -170,7 +170,6 @@ namespace aft
       std::multiset<Request*, RequestComp>& requests_,
       snmalloc::DLList<Request, std::nullptr_t, true>& requests_list_)
     {
-      // TODO: fix this
       CCF_ASSERT_FMT(
         requests_list_.get_tail() == nullptr ||
           requests_list_.get_tail()->time <= time,

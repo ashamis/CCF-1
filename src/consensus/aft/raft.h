@@ -674,7 +674,7 @@ namespace aft
           {
             {
               std::unique_lock<SpinLock> guard(state->lock);
-              LOG_INFO_FMT("ZZZZZZZZZZZZZZZZ");
+              //LOG_INFO_FMT("ZZZZZZZZZZZZZZZZ");
               msg_aaaa->data.pending_execution->async_execute();
             }
               fn_foobar(std::move(msg_aaaa));
