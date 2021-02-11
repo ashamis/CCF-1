@@ -251,11 +251,14 @@ namespace kv
 
       kv::ConsensusHookPtrs hooks;
 
+    std::optional<Version> new_maps_conflict_version = std::nullopt; 
+
       auto c = apply_changes(
         all_changes,
         f == nullptr ? [store]() { return store->next_version(); } : f,
         hooks,
         created_maps,
+        new_maps_conflict_version,
         track_conflicts);
 
       if (!created_maps.empty())

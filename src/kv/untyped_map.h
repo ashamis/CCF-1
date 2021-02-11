@@ -115,6 +115,9 @@ namespace kv::untyped
           return true;
 
         auto& roll = map.get_roll();
+        auto consensus = map.store->get_consensus();
+        bool track_conflicts =
+          (consensus != nullptr && consensus->type() == ConsensusType::BFT);
 
         // If the parent map has rolled back since this transaction began, this
         // transaction must fail.
@@ -152,7 +155,15 @@ namespace kv::untyped
           {
             // If we depend on the key existing, it must be present and have the
             // version that we expect.
-            if (!search.has_value() || (std::get<0>(it->second) != search.value().version || std::get<1>(it->second) != search.value().read_version))
+            if (
+              !search.has_value() ||
+              std::get<0>(it->second) != search.value().version ||
+              (track_conflicts &&
+               std::get<1>(it->second) != search.value().read_version))
+            /*if (
+              !search.has_value() ||
+              std::get<0>(it->second) != search.value().version)
+              */
 
             {
               LOG_DEBUG_FMT("Read depends on invalid version of entry");
@@ -174,7 +185,7 @@ namespace kv::untyped
 
         // If we have iterated over the map, check for a global version match.
 
-        if (!skip_max_conflict)
+        if (!skip_max_conflict && !track_commit)
         {
           for (auto it = change_set.reads.begin(); it != change_set.reads.end();
                ++it)
@@ -184,12 +195,6 @@ namespace kv::untyped
             {
               max_conflict_version = search->version;
             }
-            /*
-            if (max_conflict_version < search->read_version && search.has_value())
-            {
-              max_conflict_version = search->read_version;
-            }
-            */
           }
 
           for (auto it = change_set.writes.begin();
