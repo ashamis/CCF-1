@@ -537,7 +537,8 @@ namespace aft
       AsyncPendingExec(
         Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self_,
         std::unique_ptr<AbstractMsgCallback>&& pending_execution_) :
-        self(self_), pending_execution(std::move(pending_execution_))
+        self(self_),
+        pending_execution(std::move(pending_execution_))
       {}
 
       Aft<LedgerProxy, ChannelProxy, SnapshotterProxy>* self;
@@ -550,7 +551,6 @@ namespace aft
       msg->data.self->add_to_pending_execution(
         std::move(msg->data.pending_execution));
     };
-
 
     void recv_message(OArray&& d)
     {
@@ -657,16 +657,17 @@ namespace aft
 
         if (always_execute_async)
         {
-          auto async_pending_msg = std::make_unique<threading::Tmsg<AsyncPendingExec>>(
-            [](std::unique_ptr<threading::Tmsg<AsyncPendingExec>> msg) {
-              msg->data.pending_execution->async_execute();
+          auto async_pending_msg =
+            std::make_unique<threading::Tmsg<AsyncPendingExec>>(
+              [](std::unique_ptr<threading::Tmsg<AsyncPendingExec>> msg) {
+                msg->data.pending_execution->async_execute();
 
-              msg->reset_cb(add_to_pending_execution_cb);
-              threading::ThreadMessaging::thread_messaging.add_task(
-                threading::MAIN_THREAD_ID, std::move(msg));
-            },
-            this,
-            std::move(aee));
+                msg->reset_cb(add_to_pending_execution_cb);
+                threading::ThreadMessaging::thread_messaging.add_task(
+                  threading::MAIN_THREAD_ID, std::move(msg));
+              },
+              this,
+              std::move(aee));
 
           if (threading::ThreadMessaging::thread_count > 1)
           {
@@ -697,7 +698,7 @@ namespace aft
 
       try_execute_pending();
     }
-    
+
     void add_to_pending_execution(std::unique_ptr<AbstractMsgCallback> aee)
     {
       if (!is_execution_pending)
@@ -1304,7 +1305,7 @@ namespace aft
         msg->cb(std::move(msg));
       }
     }
-    
+
     struct AsyncExecutionRet
     {
       AsyncExecutionRet(
@@ -1363,7 +1364,8 @@ namespace aft
     {
       AsyncExecutionCtx(
         std::unique_ptr<threading::Tmsg<AsyncExecution>>&& msg_) :
-        msg(std::move(msg_)), pending_cbs(0)
+        msg(std::move(msg_)),
+        pending_cbs(0)
       {}
 
       std::unique_ptr<threading::Tmsg<AsyncExecution>> msg;
@@ -1400,7 +1402,9 @@ namespace aft
 
     uint64_t next_exec_thread = 0;
 
-    void run_async_execution(std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>>& pending_requests)
+    void run_async_execution(
+      std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>>&
+        pending_requests)
     {
       for (auto& tmsg : pending_requests)
       {
@@ -1420,7 +1424,7 @@ namespace aft
       AppendEntries& r = msg->data.r;
       bool confirm_evidence = msg->data.confirm_evidence;
 
-      while(!append_entries.empty())
+      while (!append_entries.empty())
       {
         auto ae = std::move(append_entries.front());
         append_entries.pop_front();
@@ -1533,7 +1537,8 @@ namespace aft
       uint64_t before_state_idx = state->last_idx;
       bool run_sync = threading::ThreadMessaging::thread_count == 1;
 
-      std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>> pending_requests;
+      std::vector<std::unique_ptr<threading::Tmsg<AsyncExecTxMsg>>>
+        pending_requests;
 
       std::unique_lock<SpinLock> guard(state->lock, std::defer_lock);
       if (!run_sync)
@@ -1541,7 +1546,7 @@ namespace aft
         guard.lock();
       }
 
-      while(!append_entries.empty())
+      while (!append_entries.empty())
       {
         std::unique_ptr<kv::AbstractExecutionWrapper>& wrapper =
           std::get<0>(append_entries.front());
@@ -1554,8 +1559,8 @@ namespace aft
           }
 
           if (
-            !wrapper->support_asyc_execution() &&
-            !is_first && (async_exec->pending_cbs > 0))
+            !wrapper->support_asyc_execution() && !is_first &&
+            (async_exec->pending_cbs > 0))
           {
             run_async_execution(pending_requests);
             return false;
@@ -1563,8 +1568,7 @@ namespace aft
 
           if (
             wrapper->support_asyc_execution() &&
-            wrapper->get_max_conflict_version() >=
-              before_state_idx)
+            wrapper->get_max_conflict_version() >= before_state_idx)
           {
             if (!pending_requests.empty())
             {
@@ -1575,7 +1579,8 @@ namespace aft
         }
 
         is_first = false;
-        must_break = !wrapper->support_asyc_execution() && (async_exec->pending_cbs > 0);
+        must_break =
+          !wrapper->support_asyc_execution() && (async_exec->pending_cbs > 0);
 
         auto ae = std::move(append_entries.front());
         append_entries.pop_front();
