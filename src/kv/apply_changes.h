@@ -80,6 +80,7 @@ namespace kv
     }
 
     bool ok = true;
+    bool set_max_conflict_version_to_version = false;
     for (auto it = views.begin(); it != views.end(); ++it)
     {
       if (!it->second->prepare(track_conflicts, max_conflict_version))
@@ -87,6 +88,14 @@ namespace kv
         ok = false;
         break;
       }
+      if (max_conflict_version == kv::NoVersion)
+      {
+        set_max_conflict_version_to_version = true;
+      }
+      LOG_INFO_FMT(
+        "map_name:{}, max_conflict_version:{}",
+        it->first,
+        set_max_conflict_version_to_version);
     }
 
     for (const auto& [map_name, map_ptr] : new_maps)
@@ -123,18 +132,18 @@ namespace kv
       // Get the version number to be used for this commit.
       version = f();
 
-      if (max_conflict_version == kv::NoVersion)
-      {
-        max_conflict_version = version - 1;
-      }
-
       if (version > max_conflict_version || !track_conflicts)
       {
         // Since the tracking of a read version is done in a key-value pair we
         // cannot track the dependencies of two transactions that depend on a
         // key-value pair on a map that does not exist yet. We therefore gate
         // execution pipelining on map creation.
-        if (!new_maps.empty() && version > 0)
+        //
+        // Alternatively, if the prepare could not set a version of max_conflict_version
+        // then we say there is no parallelism
+        if (
+          (!new_maps.empty() && version > 0) ||
+          set_max_conflict_version_to_version)
         {
           max_conflict_version = version - 1;
         }
@@ -167,6 +176,7 @@ namespace kv
       }
       else
       {
+        LOG_INFO_FMT("conflict violation version:{}, max_conflict_version:{}, track_conflicts:{}", version, max_conflict_version, track_conflicts);
         ok = false;
       }
     }

@@ -82,7 +82,7 @@ namespace ccf
 
   static void log_hash(const crypto::Sha256Hash& h, HashOp flag)
   {
-    LOG_DEBUG_FMT("History [{}] {}", flag, h);
+    LOG_INFO_FMT("History [{}] {}", flag, h);
   }
 
   class NullTxHistoryPendingTx : public kv::PendingTx
@@ -275,11 +275,14 @@ namespace ccf
 
     kv::PendingTxInfo call() override
     {
-      std::lock_guard<SpinLock> guard(state_lock);
       auto sig = store.create_reserved_tx(txid.version);
       auto signatures =
         sig.template rw<ccf::Signatures>(ccf::Tables::SIGNATURES);
-      crypto::Sha256Hash root = replicated_state_tree.get_root();
+      crypto::Sha256Hash root;
+      {
+        std::lock_guard<SpinLock> guard(state_lock);
+        root = replicated_state_tree.get_root();
+      }
 
       Nonce hashed_nonce;
       std::vector<uint8_t> primary_sig;

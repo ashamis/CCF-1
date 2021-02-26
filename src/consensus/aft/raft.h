@@ -719,6 +719,7 @@ namespace aft
           this,
           std::move(aee));
 
+      /*
       if (threading::ThreadMessaging::thread_count > 1)
       {
         threading::ThreadMessaging::thread_messaging.add_task(
@@ -726,6 +727,7 @@ namespace aft
           std::move(async_pending_msg));
       }
       else
+      */
       {
         async_pending_msg->data.pending_execution->async_execute();
         add_to_pending_execution_cb(std::move(async_pending_msg));
@@ -1538,7 +1540,7 @@ namespace aft
       execute_append_entries_finish(confirm_evidence, r);
     }
 
-    AsyncExecutionResult process_async_execution(
+    void process_async_execution(
       kv::ApplyResult apply_result,
       std::unique_ptr<kv::AbstractExecutionWrapper>& ds,
       kv::Version i,
@@ -1560,7 +1562,7 @@ namespace aft
         ledger->truncate(state->last_idx);
         send_append_entries_response(
           r.from_node, AppendEntriesResponseType::FAIL);
-        return AsyncExecutionResult::COMPLETE;
+        return;
       }
 
       for (auto& hook : ds->get_hooks())
@@ -1716,12 +1718,13 @@ namespace aft
           throw std::logic_error("Unknown ApplyResult value");
         }
       }
-      return AsyncExecutionResult::COMPLETE;
+      return;
     }
 
     AsyncExecutionResult execute_append_entries_async(
       std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
     {
+      LOG_INFO_FMT("Starting next batch last_idx:{}", state->last_idx);
       // This function is responsible for selecting the next batch of
       // transactions we can execute concurrently and then starting said
       // execution. If there are more pending entries after we select the batch
@@ -1748,19 +1751,16 @@ namespace aft
         state->last_idx = i;
 
         kv::ApplyResult apply_result = ds->apply();
-        if (
-          process_async_execution(apply_result, ds, i, r) ==
-          AsyncExecutionResult::PENDING)
-        {
-          return AsyncExecutionResult::PENDING;
-        }
+        process_async_execution(apply_result, ds, i, r);
       }
 
       if (async_executor.execution_status() == AsyncExecutionResult::COMPLETE)
       {
         execute_append_entries_finish(confirm_evidence, r);
+        LOG_INFO_FMT("finished execution - complete");
         return AsyncExecutionResult::COMPLETE;
       }
+        LOG_INFO_FMT("finished execution - pending");
       return AsyncExecutionResult::PENDING;
     }
 
@@ -1894,6 +1894,7 @@ namespace aft
           r.from_node, r.signature_size, r.sig, r.root);
         if (!res)
         {
+          LOG_INFO_FMT("DDDD should not be here");
           return false;
         }
       }

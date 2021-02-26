@@ -305,6 +305,13 @@ namespace ccf
             result = tx.commit(track_conflicts);
           }
 
+          if (
+            !consensus->is_primary() && result != kv::CommitResult::SUCCESS)
+          {
+            LOG_INFO_FMT("AAAAAAAAAAAA failed");
+            throw std::logic_error("something went wrong");
+          }
+
           switch (result)
           {
             case kv::CommitResult::SUCCESS:
@@ -405,6 +412,7 @@ namespace ccf
           return ctx->serialise_response();
         }
       }
+      LOG_INFO_FMT("Too many retries");
 
       ctx->set_error(
         HTTP_STATUS_SERVICE_UNAVAILABLE,

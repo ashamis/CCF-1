@@ -140,7 +140,7 @@ namespace kv::untyped
         {
           // Get the value from the current state.
           auto search = current->state.get(it->first);
-          if (max_conflict_version < search->version && search.has_value())
+          if (map.include_conflict_read_version && max_conflict_version < search->version && search.has_value())
           {
             max_conflict_version = search->version;
           }
