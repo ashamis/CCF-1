@@ -1438,7 +1438,7 @@ namespace aft
 
     uint64_t next_exec_thread = 0;
 
-    bool execute_append_entries_sync(
+    void execute_append_entries_sync(
       std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
     {
       std::vector<
@@ -1459,7 +1459,6 @@ namespace aft
           ledger->truncate(state->last_idx);
           send_append_entries_response(
             r.from_node, AppendEntriesResponseType::FAIL);
-          return true;
         }
 
         for (auto& hook : ds->get_hooks())
@@ -1536,7 +1535,7 @@ namespace aft
         }
       }
 
-      return execute_append_entries_finish(confirm_evidence, r);
+      execute_append_entries_finish(confirm_evidence, r);
     }
 
     AsyncExecutionResult process_async_execution(
@@ -1723,7 +1722,7 @@ namespace aft
     AsyncExecutionResult execute_append_entries_async(
       std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
     {
-      // This function is responsible for selection the next batch of
+      // This function is responsible for selecting the next batch of
       // transactions we can execute concurrently and then starting said
       // execution. If there are more pending entries after we select the batch
       // we will return to this function.
@@ -1765,7 +1764,7 @@ namespace aft
       return AsyncExecutionResult::PENDING;
     }
 
-    bool execute_append_entries_finish(bool confirm_evidence, AppendEntries& r)
+    void execute_append_entries_finish(bool confirm_evidence, AppendEntries& r)
     {
       if (
         consensus_type == ConsensusType::BFT && confirm_evidence &&
@@ -1781,7 +1780,6 @@ namespace aft
           r.term);
         send_append_entries_response(
           r.from_node, AppendEntriesResponseType::REQUIRE_EVIDENCE);
-        return true;
       }
 
       // After entries have been deserialised, we try to commit the leader's
@@ -1800,7 +1798,6 @@ namespace aft
       }
 
       send_append_entries_response(r.from_node, AppendEntriesResponseType::OK);
-      return true;
     }
 
     void send_append_entries_response(

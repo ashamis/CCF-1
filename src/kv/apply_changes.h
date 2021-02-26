@@ -82,7 +82,7 @@ namespace kv
     bool ok = true;
     for (auto it = views.begin(); it != views.end(); ++it)
     {
-      if (!it->second->prepare(track_conflicts))
+      if (!it->second->prepare(track_conflicts, max_conflict_version))
       {
         ok = false;
         break;
@@ -123,39 +123,51 @@ namespace kv
       // Get the version number to be used for this commit.
       version = f();
 
-      // Since the tracking of a read version is done in a key-value pair we
-      // cannot track the dependencies of two transactions that depend on a
-      // key-value pair on a map that does not exist yet. We therefore gate
-      // execution pipelining on map creation.
-      if (!new_maps.empty() && version > 0)
+      if (max_conflict_version == kv::NoVersion)
       {
         max_conflict_version = version - 1;
       }
 
-      // Transfer ownership of these new maps to their target stores, iff we
-      // have writes to them
-      for (const auto& [map_name, map_ptr] : new_maps)
+      if (version > max_conflict_version || !track_conflicts)
       {
-        const auto it = views.find(map_name);
-        if (it != views.end() && it->second->has_writes())
+        // Since the tracking of a read version is done in a key-value pair we
+        // cannot track the dependencies of two transactions that depend on a
+        // key-value pair on a map that does not exist yet. We therefore gate
+        // execution pipelining on map creation.
+        if (!new_maps.empty() && version > 0)
         {
-          map_ptr->get_store()->add_dynamic_map(version, map_ptr);
+          max_conflict_version = version - 1;
+        }
+
+        // Transfer ownership of these new maps to their target stores, iff we
+        // have writes to them
+        for (const auto& [map_name, map_ptr] : new_maps)
+        {
+          const auto it = views.find(map_name);
+          if (it != views.end() && it->second->has_writes())
+          {
+            map_ptr->get_store()->add_dynamic_map(version, map_ptr);
+          }
+        }
+
+        for (auto it = views.begin(); it != views.end(); ++it)
+        {
+          it->second->commit(version, track_conflicts);
+        }
+
+        // Collect ConsensusHooks
+        for (auto it = views.begin(); it != views.end(); ++it)
+        {
+          auto hook_ptr = it->second->post_commit();
+          if (hook_ptr != nullptr)
+          {
+            hooks.push_back(std::move(hook_ptr));
+          }
         }
       }
-
-      for (auto it = views.begin(); it != views.end(); ++it)
+      else
       {
-        it->second->commit(version, track_conflicts, max_conflict_version);
-      }
-
-      // Collect ConsensusHooks
-      for (auto it = views.begin(); it != views.end(); ++it)
-      {
-        auto hook_ptr = it->second->post_commit();
-        if (hook_ptr != nullptr)
-        {
-          hooks.push_back(std::move(hook_ptr));
-        }
+        ok = false;
       }
     }
 

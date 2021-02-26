@@ -253,27 +253,27 @@ namespace aft
       }
       ccf::PrimarySignature& get_signature() override
       {
-        throw std::logic_error("Not Implemented");
+        throw std::logic_error("get_signature not implemented");
       }
 
       kv::Tx& get_tx() override
       {
-        throw std::logic_error("Not Implemented");
+        throw std::logic_error("get_tx not implemented");
       }
 
       bool support_async_execution() override
       {
-        throw std::logic_error("Not Implemented");
+        return false;
       }
 
       uint64_t get_max_conflict_version() override
       {
-        throw std::logic_error("get_index not implemented");
+        throw std::logic_error("get_max_conflict_version not implemented");
       }
 
       aft::Request& get_request() override
       {
-        throw std::logic_error("get_index not implemented");
+        throw std::logic_error("get_request not implemented");
       }
 
     private:

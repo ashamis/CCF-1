@@ -1454,25 +1454,159 @@ TEST_CASE("Conflict resolution")
   REQUIRE(res3 == kv::CommitResult::SUCCESS);
 
   REQUIRE(tx1.commit_version() > tx2.commit_version());
-  REQUIRE(tx1.get_read_version() >= tx2.get_read_version());
+  REQUIRE(tx3.get_read_version() > tx2.get_read_version());
 
   // Re-running a _committed_ transaction is exceptionally bad
   REQUIRE_THROWS(tx1.commit());
   REQUIRE_THROWS(tx2.commit());
 }
 
+TEST_CASE("Primary creates correct execution order") // TODO: rename
+{
+  struct TxInfo
+  {
+    uint32_t id;
+    kv::Version max_conflict_version;
+  };
+  std::vector<TxInfo> txs;
+
+  // Execute on primary
+  {
+    kv::Store kv_store_primary;
+    MapTypes::StringString map("public:map");
+
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+      TxInfo info = {i, kv::NoVersion};
+      auto tx = kv_store_primary.create_tx();
+      auto handle = tx.rw(map);
+      handle->get(std::to_string(info.id));
+      handle->put(std::to_string(info.id), std::to_string(info.id));
+      REQUIRE(tx.commit(true) == kv::CommitResult::SUCCESS);
+      info.max_conflict_version = tx.get_max_conflict_version();
+      txs.push_back(info);
+    }
+  }
+
+  // Execute on backup
+  {
+    kv::Store kv_store_backup;
+    MapTypes::StringString map("public:map");
+
+    // create the map on the backup
+    {
+      TxInfo& info = txs[0];
+      auto tx = kv_store_backup.create_tx();
+      auto handle = tx.rw(map);
+      handle->get(std::to_string(info.id));
+      handle->put(std::to_string(info.id), std::to_string(info.id));
+      auto version_resolver = [&]() { return info.id; };
+      REQUIRE(tx.commit(true, version_resolver, info.max_conflict_version) == kv::CommitResult::SUCCESS);
+    }
+
+    // Verify that we can execute the transaction is a random (reverse order) as there is no dependency
+    for (uint32_t i = 4; i > 1; --i)
+    {
+      TxInfo& info = txs[i];
+      auto tx = kv_store_backup.create_tx();
+      auto handle = tx.rw(map);
+      handle->get(std::to_string(info.id));
+      handle->put(std::to_string(info.id), std::to_string(info.id));
+      auto version_resolver = [&]() { return info.id; };
+      REQUIRE(tx.commit(true, version_resolver, info.max_conflict_version) == kv::CommitResult::SUCCESS);
+    }
+  }
+}
+
+TEST_CASE("Primary creates byzantine execution order")
+{
+  struct TxInfo
+  {
+    uint32_t id;
+    kv::Version max_conflict_version;
+  };
+  std::vector<TxInfo> txs;
+
+  // Execute on primary
+  {
+    kv::Store kv_store_primary;
+    MapTypes::StringString map("public:map");
+
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+      TxInfo info = {i, 0};
+      auto tx = kv_store_primary.create_tx();
+      auto handle = tx.rw(map);
+      handle->get("key");
+      handle->put("key", std::to_string(info.id));
+      REQUIRE(tx.commit(true) == kv::CommitResult::SUCCESS);
+      txs.push_back(info);
+    }
+  }
+
+  // Test the maps on the backup need to be created after a synchronization
+  // point, i.e. max_conflict_version = version -1
+  {
+    kv::Store kv_store_backup;
+    MapTypes::StringString map("public:map");
+
+    TxInfo& info = txs[4];
+    auto tx = kv_store_backup.create_tx();
+    auto handle = tx.rw(map);
+    handle->get("key");
+    handle->put("key", std::to_string(info.id));
+    auto version_resolver = [&]() { return info.id; };
+    REQUIRE(
+      tx.commit(true, version_resolver, info.max_conflict_version) == kv::CommitResult::FAIL_CONFLICT);
+  }
+
+  // Execute on backup
+  {
+    kv::Store kv_store_backup;
+    MapTypes::StringString map("public:map");
+
+    // Run the transaction that creates the map
+    {
+      TxInfo& info = txs[0];
+      auto tx = kv_store_backup.create_tx();
+      auto handle = tx.rw(map);
+      handle->get("key");
+      handle->put("key", std::to_string(info.id));
+      auto version_resolver = [&]() { return info.id; };
+      REQUIRE(tx.commit(true, version_resolver, info.max_conflict_version) == kv::CommitResult::SUCCESS);
+    }
+
+    // Run the transaction the final transaction so any transaction with a
+    // version before this one will result a linearlizability exception
+    {
+      TxInfo& info = txs[4];
+      auto tx = kv_store_backup.create_tx();
+      auto handle = tx.rw(map);
+      handle->get("key");
+      handle->put("key", std::to_string(info.id));
+      auto version_resolver = [&]() { return info.id; };
+      REQUIRE(tx.commit(true, version_resolver, info.max_conflict_version) == kv::CommitResult::SUCCESS);
+    }
+
+    // Validate the incorrectly created tx order cannot commit
+    for (uint32_t i = 1; i < 4; ++i)
+    {
+      TxInfo& info = txs[i];
+      auto tx = kv_store_backup.create_tx();
+      auto handle = tx.rw(map);
+      handle->put("key", std::to_string(info.id));
+      auto version_resolver = [&]() { return info.id; };
+      REQUIRE(
+        tx.commit(true, version_resolver, info.max_conflict_version) ==
+        kv::CommitResult::FAIL_CONFLICT);
+    } 
+  }
+}
+
 TEST_CASE("Backup conflict detection")
 {
   kv::Store kv_store;
   MapTypes::StringString map("public:map");
-
-  {
-    // Ensure this map already exists, by making a prior write to it
-    auto tx = kv_store.create_tx();
-    auto handle = tx.rw(map);
-    handle->put("foo", "initial");
-    REQUIRE(tx.commit(true) == kv::CommitResult::SUCCESS);
-  }
 
   // Add some values to the map
   for (uint32_t i = 0; i < 10; ++i)
@@ -1489,7 +1623,10 @@ TEST_CASE("Backup conflict detection")
   handle->put("foo", "value");
   kv::Version max_conflict_version = 2;
   auto version_resolver = [&]() { return max_conflict_version - 1; };
-  REQUIRE_THROWS(tx.commit(true, version_resolver, max_conflict_version));
+  REQUIRE(tx.commit(
+    true,
+    version_resolver,
+    max_conflict_version == kv::CommitResult::FAIL_CONFLICT));
 }
 
 TEST_CASE("Mid-tx compaction")

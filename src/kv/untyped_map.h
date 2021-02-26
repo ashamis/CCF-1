@@ -110,12 +110,13 @@ namespace kv::untyped
         return committed_writes || change_set.has_writes();
       }
 
-      bool prepare(bool track_conflicts) override
+      bool prepare(bool track_conflicts, kv::Version& max_conflict_version) override
       {
         if (change_set.writes.empty())
           return true;
 
         auto& roll = map.get_roll();
+        auto state = roll.commits->get_tail()->state;
 
         // If the parent map has rolled back since this transaction began, this
         // transaction must fail.
@@ -139,6 +140,10 @@ namespace kv::untyped
         {
           // Get the value from the current state.
           auto search = current->state.get(it->first);
+          if (max_conflict_version < search->version && search.has_value())
+          {
+            max_conflict_version = search->version;
+          }
 
           if (std::get<0>(it->second) == NoVersion)
           {
@@ -164,31 +169,8 @@ namespace kv::untyped
             }
           }
         }
-        return true;
-      }
-
-      void commit(
-        Version v,
-        bool track_conflicts,
-        kv::Version& max_conflict_version) override
-      {
-        auto& roll = map.get_roll();
-        auto current = roll.commits->get_tail();
-        auto state = current->state;
-        bool is_writing_to_new_key = false;
-
         if (map.include_conflict_read_version && track_conflicts)
         {
-          for (auto it = change_set.reads.begin(); it != change_set.reads.end();
-               ++it)
-          {
-            auto search = state.get(it->first);
-            if (max_conflict_version < search->version && search.has_value())
-            {
-              max_conflict_version = search->version;
-            }
-          }
-
           for (auto it = change_set.writes.begin();
                it != change_set.writes.end();
                ++it)
@@ -206,10 +188,22 @@ namespace kv::untyped
 
             if (!search.has_value())
             {
-              is_writing_to_new_key = true;
+              // When we get a version set it to version - 1
+              max_conflict_version = kv::NoVersion;
             }
           }
         }
+
+        return true;
+      }
+
+      void commit(
+        Version v,
+        bool track_conflicts) override
+      {
+        auto& roll = map.get_roll();
+        auto current = roll.commits->get_tail();
+        auto state = current->state;
 
         if (track_conflicts)
         {
@@ -241,11 +235,6 @@ namespace kv::untyped
         // Record our commit time.
         commit_version = v;
         committed_writes = true;
-
-        if (is_writing_to_new_key)
-        {
-          max_conflict_version = std::max(max_conflict_version, v - 1);
-        }
 
         for (auto it = change_set.writes.begin(); it != change_set.writes.end();
              ++it)
@@ -449,13 +438,13 @@ namespace kv::untyped
         return true;
       }
 
-      bool prepare(bool) override
+      bool prepare(bool, kv::Version&) override
       {
         // Snapshots never conflict
         return true;
       }
 
-      void commit(Version, bool, kv::Version&) override
+      void commit(Version, bool) override
       {
         // Version argument is ignored. The version of the roll after the
         // snapshot is applied depends on the version of the map at which the
