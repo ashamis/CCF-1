@@ -719,7 +719,6 @@ namespace aft
           this,
           std::move(aee));
 
-      /*
       if (threading::ThreadMessaging::thread_count > 1)
       {
         threading::ThreadMessaging::thread_messaging.add_task(
@@ -727,7 +726,6 @@ namespace aft
           std::move(async_pending_msg));
       }
       else
-      */
       {
         async_pending_msg->data.pending_execution->async_execute();
         add_to_pending_execution_cb(std::move(async_pending_msg));

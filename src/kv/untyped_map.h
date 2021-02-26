@@ -112,11 +112,37 @@ namespace kv::untyped
 
       bool prepare(bool track_conflicts, kv::Version& max_conflict_version) override
       {
-        if (change_set.writes.empty())
-          return true;
-
         auto& roll = map.get_roll();
         auto state = roll.commits->get_tail()->state;
+
+        auto current = roll.commits->get_tail();
+
+
+        if (map.include_conflict_read_version && track_conflicts)
+        {
+          for (auto it = change_set.reads.begin(); it != change_set.reads.end();
+               ++it)
+          {
+            // Get the value from the current state.
+            auto search = current->state.get(it->first);
+            if (
+              map.include_conflict_read_version &&
+              max_conflict_version < search->version && search.has_value())
+            {
+              max_conflict_version = search->version;
+            }
+            LOG_INFO_FMT(
+              "DDD attempting to set version include:{}, "
+              "max_conflict_version:{}, search->version:{}, has_value:{}",
+              map.include_conflict_read_version,
+              max_conflict_version,
+              search->version,
+              search.has_value());
+          }
+        }
+
+        if (change_set.writes.empty())
+          return true;
 
         // If the parent map has rolled back since this transaction began, this
         // transaction must fail.
@@ -124,8 +150,6 @@ namespace kv::untyped
           return false;
 
         // If we have iterated over the map, check for a global version match.
-        auto current = roll.commits->get_tail();
-
         if (
           (change_set.read_version != NoVersion) &&
           (change_set.read_version != current->version))
@@ -140,10 +164,6 @@ namespace kv::untyped
         {
           // Get the value from the current state.
           auto search = current->state.get(it->first);
-          if (map.include_conflict_read_version && max_conflict_version < search->version && search.has_value())
-          {
-            max_conflict_version = search->version;
-          }
 
           if (std::get<0>(it->second) == NoVersion)
           {
@@ -188,10 +208,27 @@ namespace kv::untyped
 
             if (!search.has_value())
             {
-              // When we get a version set it to version - 1
+              // If the key does not exist set the conflict version to version
+              // -1 as dependency tracking does not work for keys that do not
+              // exist
+              LOG_INFO_FMT("key does not have a value");
               max_conflict_version = kv::NoVersion;
             }
+            LOG_INFO_FMT(
+              "FFFFF max_conflict_version:{}, search->version:{}, "
+              "search->read_version:{}, has_version:{}",
+              max_conflict_version,
+              search->version,
+              search->read_version,
+              search.has_value());
           }
+        }
+        else
+        {
+          LOG_INFO_FMT(
+            "EEEEE include_conflict_read_version:{}, track_conflicts:{}",
+            map.include_conflict_read_version,
+            track_conflicts);
         }
 
         return true;
