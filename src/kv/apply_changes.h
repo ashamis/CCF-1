@@ -92,10 +92,6 @@ namespace kv
       {
         set_max_conflict_version_to_version = true;
       }
-      LOG_INFO_FMT(
-        "map_name:{}, max_conflict_version:{}",
-        it->first,
-        set_max_conflict_version_to_version);
     }
 
     for (const auto& [map_name, map_ptr] : new_maps)

@@ -137,14 +137,7 @@ void ordered_execution(
         pt->add_nonce_reveal({view, seqno}, nonce, i, node_count, am_i_primary);
       }
 
-      if (i < 2)
-      {
-        REQUIRE(pt->get_highest_committed_nonce() == 0);
-      }
-      else
-      {
-        REQUIRE(pt->get_highest_committed_nonce() == seqno);
-      }
+      REQUIRE(pt->get_highest_committed_nonce() == seqno);
     }
   }
 }

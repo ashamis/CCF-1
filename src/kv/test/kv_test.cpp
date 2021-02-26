@@ -1461,7 +1461,7 @@ TEST_CASE("Conflict resolution")
   REQUIRE_THROWS(tx2.commit());
 }
 
-TEST_CASE("Primary creates correct execution order") // TODO: rename
+TEST_CASE("Primary can create correct execution order") 
 {
   struct TxInfo
   {
@@ -1518,7 +1518,7 @@ TEST_CASE("Primary creates correct execution order") // TODO: rename
   }
 }
 
-TEST_CASE("Primary creates byzantine execution order")
+TEST_CASE("Backup can detect byzantine execution order")
 {
   struct TxInfo
   {
@@ -1601,32 +1601,6 @@ TEST_CASE("Primary creates byzantine execution order")
         kv::CommitResult::FAIL_CONFLICT);
     } 
   }
-}
-
-TEST_CASE("Backup conflict detection")
-{
-  kv::Store kv_store;
-  MapTypes::StringString map("public:map");
-
-  // Add some values to the map
-  for (uint32_t i = 0; i < 10; ++i)
-  {
-    auto tx = kv_store.create_tx();
-    auto handle = tx.rw(map);
-    handle->put("foo", "value");
-    REQUIRE(tx.commit(true) == kv::CommitResult::SUCCESS);
-  }
-
-  auto tx = kv_store.create_tx();
-  auto handle = tx.rw(map);
-  handle->get("foo");
-  handle->put("foo", "value");
-  kv::Version max_conflict_version = 2;
-  auto version_resolver = [&]() { return max_conflict_version - 1; };
-  REQUIRE(tx.commit(
-    true,
-    version_resolver,
-    max_conflict_version == kv::CommitResult::FAIL_CONFLICT));
 }
 
 TEST_CASE("Mid-tx compaction")

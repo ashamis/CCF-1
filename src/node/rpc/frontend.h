@@ -305,13 +305,6 @@ namespace ccf
             result = tx.commit(track_conflicts);
           }
 
-          if (
-            !consensus->is_primary() && result != kv::CommitResult::SUCCESS)
-          {
-            LOG_INFO_FMT("AAAAAAAAAAAA failed");
-            throw std::logic_error("something went wrong");
-          }
-
           switch (result)
           {
             case kv::CommitResult::SUCCESS:

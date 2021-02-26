@@ -30,7 +30,6 @@ namespace aft
     void increment_pending()
     {
       ++pending_cbs;
-      LOG_INFO_FMT("items pending:{}", pending_cbs);
     }
 
     AsyncExecutionResult decrement_pending()

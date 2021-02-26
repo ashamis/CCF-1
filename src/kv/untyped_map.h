@@ -131,13 +131,6 @@ namespace kv::untyped
             {
               max_conflict_version = search->version;
             }
-            LOG_INFO_FMT(
-              "DDD attempting to set version include:{}, "
-              "max_conflict_version:{}, search->version:{}, has_value:{}",
-              map.include_conflict_read_version,
-              max_conflict_version,
-              search->version,
-              search.has_value());
           }
         }
 
@@ -211,24 +204,9 @@ namespace kv::untyped
               // If the key does not exist set the conflict version to version
               // -1 as dependency tracking does not work for keys that do not
               // exist
-              LOG_INFO_FMT("key does not have a value");
               max_conflict_version = kv::NoVersion;
             }
-            LOG_INFO_FMT(
-              "FFFFF max_conflict_version:{}, search->version:{}, "
-              "search->read_version:{}, has_version:{}",
-              max_conflict_version,
-              search->version,
-              search->read_version,
-              search.has_value());
           }
-        }
-        else
-        {
-          LOG_INFO_FMT(
-            "EEEEE include_conflict_read_version:{}, track_conflicts:{}",
-            map.include_conflict_read_version,
-            track_conflicts);
         }
 
         return true;

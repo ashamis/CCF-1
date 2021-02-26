@@ -1722,7 +1722,6 @@ namespace aft
     AsyncExecutionResult execute_append_entries_async(
       std::unique_ptr<threading::Tmsg<AsyncExecution>>& msg)
     {
-      LOG_INFO_FMT("Starting next batch last_idx:{}", state->last_idx);
       // This function is responsible for selecting the next batch of
       // transactions we can execute concurrently and then starting said
       // execution. If there are more pending entries after we select the batch
@@ -1755,10 +1754,8 @@ namespace aft
       if (async_executor.execution_status() == AsyncExecutionResult::COMPLETE)
       {
         execute_append_entries_finish(confirm_evidence, r);
-        LOG_INFO_FMT("finished execution - complete");
         return AsyncExecutionResult::COMPLETE;
       }
-        LOG_INFO_FMT("finished execution - pending");
       return AsyncExecutionResult::PENDING;
     }
 

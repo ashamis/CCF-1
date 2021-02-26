@@ -840,7 +840,6 @@ namespace ccf
             "Prepared terms are moving backwards new_term:{}, current_term:{}",
             tx_id.term,
             highest_prepared_level.term);
-          LOG_INFO_FMT("updating highest prepared to {}", highest_prepared_level.version);
           highest_prepared_level = tx_id;
         }
 
@@ -870,7 +869,6 @@ namespace ccf
         if (seqno > highest_commit_level)
         {
           highest_commit_level = seqno;
-        LOG_INFO_FMT("updating global commit to {}", seqno);
         }
 
       if (cert.nonces_committed_to_ledger)
